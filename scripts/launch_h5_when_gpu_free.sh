@@ -18,9 +18,9 @@ trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 echo "waiting $(date --iso-8601=seconds)" > "$STATUS"
 while true; do
   candidate="$({
-    nvidia-smi --query-gpu=index,memory.used,utilization.gpu \
+    nvidia-smi --query-gpu=index,memory.free,utilization.gpu \
       --format=csv,noheader,nounits
-  } | awk -F, '{gsub(/ /, "", $0); if ($2 < 2048 && $3 < 10) print $1;}' \
+  } | awk -F, '{gsub(/ /, "", $0); if ($2 > 24576 && $3 < 20) print $1;}' \
     | head -n 1)"
   if [[ -n "$candidate" ]]; then
     break
