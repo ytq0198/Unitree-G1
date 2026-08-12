@@ -126,6 +126,7 @@ def waypoint_velocity_tracking(
   env: ManagerBasedRlEnv,
   command_name: str,
   std: float = 0.5,
+  command_mode: str = "xy",
 ) -> torch.Tensor:
   """Reward stable tracking of the local velocity implied by a waypoint."""
   if std <= 0.0:
@@ -134,11 +135,17 @@ def waypoint_velocity_tracking(
   command = env.command_manager.get_term(command_name)
   if not isinstance(command, WaypointCommand):
     raise TypeError("waypoint velocity tracking requires WaypointCommand")
-  planar_error = torch.sum(
-    torch.square(command.command - robot.data.root_link_lin_vel_b[:, :2]), dim=-1
-  )
-  vertical_error = torch.square(robot.data.root_link_lin_vel_b[:, 2])
-  return torch.exp(-(planar_error + vertical_error) / std**2)
+  target = command.command
+  if command_mode == "forward_yaw":
+    error = torch.square(target[:, 0] - robot.data.root_link_lin_vel_b[:, 0])
+    error += torch.square(robot.data.root_link_lin_vel_b[:, 1])
+    error += torch.square(target[:, 1] - robot.data.root_link_ang_vel_b[:, 2])
+  else:
+    error = torch.sum(
+      torch.square(target - robot.data.root_link_lin_vel_b[:, :2]), dim=-1
+    )
+  error += torch.square(robot.data.root_link_lin_vel_b[:, 2])
+  return torch.exp(-error / std**2)
 
 
 def route_complete(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:

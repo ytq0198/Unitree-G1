@@ -32,7 +32,12 @@ python run_course_project.py train --mode height --device cuda:0 \
 
 python run_course_project.py eval --mode height --device cuda:0 \
   --checkpoint outputs/rsl_rl/<run>/model_<iteration>.pt \
+  --hidden-dims 512,256,128 \
   --evaluations 10 --eval-steps 5000 --seed 101
+
+python run_course_project.py submission --mode height --device cuda:0 \
+  --checkpoint outputs/rsl_rl/<run>/model_<iteration>.pt \
+  --hidden-dims 512,256,128
 ```
 
 The evolving design and verified results are recorded in:

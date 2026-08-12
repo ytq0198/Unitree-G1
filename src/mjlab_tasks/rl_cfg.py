@@ -43,11 +43,13 @@ def course_g1_navigation_ppo_runner_cfg(
   motion_path: str | Path = DEFAULT_MOTION_PATH,
   amp_reward_scale: float = 0.5,
   learning_rate: float = 1.0e-3,
+  hidden_dims: tuple[int, ...] = (256, 128),
+  entropy_coef: float = 0.01,
 ) -> RslRlOnPolicyRunnerCfg:
   obs_groups: dict[str, tuple[str, ...]]
   if observation_mode == "depth":
     actor = RslRlModelCfg(
-      hidden_dims=(256, 128),
+      hidden_dims=hidden_dims,
       activation="elu",
       obs_normalization=True,
       cnn_cfg=_VISION_CNN,
@@ -61,7 +63,7 @@ def course_g1_navigation_ppo_runner_cfg(
     obs_groups = {"actor": ("actor", "depth"), "critic": ("critic",)}
   else:
     actor = RslRlModelCfg(
-      hidden_dims=(256, 128),
+      hidden_dims=hidden_dims,
       activation="elu",
       obs_normalization=True,
       distribution_cfg={
@@ -76,7 +78,7 @@ def course_g1_navigation_ppo_runner_cfg(
     value_loss_coef=1.0,
     use_clipped_value_loss=True,
     clip_param=0.2,
-    entropy_coef=0.01,
+    entropy_coef=entropy_coef,
     num_learning_epochs=2,
     num_mini_batches=2,
     learning_rate=learning_rate,
@@ -92,7 +94,7 @@ def course_g1_navigation_ppo_runner_cfg(
   return RslRlOnPolicyRunnerCfg(
     actor=actor,
     critic=RslRlModelCfg(
-      hidden_dims=(256, 128), activation="elu", obs_normalization=True
+      hidden_dims=hidden_dims, activation="elu", obs_normalization=True
     ),
     algorithm=algorithm,
     obs_groups=obs_groups,

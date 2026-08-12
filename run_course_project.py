@@ -27,9 +27,22 @@ def main() -> None:
   parser.add_argument("--navigation-weight", type=float, default=1.0)
   parser.add_argument("--smoothness-weight", type=float, default=-0.05)
   parser.add_argument("--velocity-tracking-weight", type=float, default=2.0)
+  parser.add_argument("--gait-preservation-scale", type=float, default=0.0)
+  parser.add_argument("--max-command-speed", type=float, default=0.6)
   parser.add_argument("--amp-scale", type=float, default=0.5)
   parser.add_argument("--learning-rate", type=float, default=1.0e-3)
+  parser.add_argument(
+    "--command-mode", choices=("xy", "forward_yaw"), default="xy"
+  )
+  parser.add_argument("--run-tag", default="")
+  parser.add_argument("--align-start-heading", action="store_true")
+  parser.add_argument("--start-heading-spread", type=float, default=0.25)
+  parser.add_argument("--hidden-dims", default="256,128")
+  parser.add_argument("--entropy-coef", type=float, default=0.01)
+  parser.add_argument("--warmstart-std", type=float)
+  parser.add_argument("--training-pushes", action="store_true")
   args = parser.parse_args()
+  hidden_dims = tuple(int(value) for value in args.hidden_dims.split(","))
 
   from src import workflow
 
@@ -64,8 +77,18 @@ def main() -> None:
       navigation_reward_weight=args.navigation_weight,
       smoothness_reward_weight=args.smoothness_weight,
       velocity_tracking_weight=args.velocity_tracking_weight,
+      gait_preservation_scale=args.gait_preservation_scale,
+      max_command_speed=args.max_command_speed,
       amp_reward_scale=args.amp_scale,
       learning_rate=args.learning_rate,
+      command_mode=args.command_mode,
+      run_tag=args.run_tag,
+      align_start_heading=args.align_start_heading,
+      start_heading_spread=args.start_heading_spread,
+      hidden_dims=hidden_dims,
+      entropy_coef=args.entropy_coef,
+      warmstart_std=args.warmstart_std,
+      training_pushes=args.training_pushes,
     )
     print(run_dir)
     return
@@ -84,6 +107,11 @@ def main() -> None:
       device=args.device,
       seed=args.seed,
       student_file=student,
+      command_mode=args.command_mode,
+      align_start_heading=args.align_start_heading,
+      start_heading_spread=args.start_heading_spread,
+      hidden_dims=hidden_dims,
+      max_command_speed=args.max_command_speed,
     )
     path = outputs / f"eval_{args.mode}.json"
     path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
@@ -97,12 +125,19 @@ def main() -> None:
         device=args.device,
         seed=args.seed,
         student_file=student,
+        command_mode=args.command_mode,
+        hidden_dims=hidden_dims,
       )
     )
   else:
     print(
       workflow.prepare_submission(
-        checkpoint, args.mode, device=args.device, student_file=student
+        checkpoint,
+        args.mode,
+        device=args.device,
+        student_file=student,
+        command_mode=args.command_mode,
+        hidden_dims=hidden_dims,
       )
     )
 

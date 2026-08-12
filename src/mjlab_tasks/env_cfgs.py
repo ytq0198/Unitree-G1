@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import math
 from typing import Any, Literal, cast
 
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -49,6 +50,12 @@ def course_g1_navigation_env_cfg(
   navigation_reward_weight: float = 1.0,
   smoothness_reward_weight: float = -0.05,
   velocity_tracking_weight: float = 2.0,
+  gait_preservation_scale: float = 0.0,
+  max_command_speed: float = 0.6,
+  command_mode: Literal["xy", "forward_yaw"] = "xy",
+  align_start_heading: bool = False,
+  start_heading_spread: float = 0.25,
+  training_pushes: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   """Create the physical navigation task without a low-level policy layer."""
   if observation_mode not in ("height", "depth"):
@@ -77,8 +84,16 @@ def course_g1_navigation_env_cfg(
   cfg.auto_reset = False
   cfg.scale_rewards_by_dt = True
   cfg.events["reset_robot_joints"].func = reset_joints_by_offset_batched
+  if align_start_heading:
+    route_dx = navigation_scene.route[1][0] - navigation_scene.route[0][0]
+    route_dy = navigation_scene.route[1][1] - navigation_scene.route[0][1]
+    route_heading = math.atan2(route_dy, route_dx)
+    cfg.events["reset_base"].params["pose_range"]["yaw"] = (
+      route_heading - start_heading_spread,
+      route_heading + start_heading_spread,
+    )
   cfg.events.pop("randomize_terrain", None)
-  if play:
+  if play or not training_pushes:
     cfg.events.pop("push_robot", None)
 
   for sensor in cfg.scene.sensors or ():
@@ -91,6 +106,8 @@ def course_g1_navigation_env_cfg(
       route=navigation_scene.route,
       student_path=student_path,
       waypoint_threshold=0.45,
+      max_command_speed=max_command_speed,
+      command_mode=command_mode,
       resampling_time_range=(1.0e9, 1.0e9),
       debug_vis=False,
     )
@@ -155,7 +172,11 @@ def course_g1_navigation_env_cfg(
     "waypoint_velocity_tracking": RewardTermCfg(
       func=waypoint_velocity_tracking,
       weight=velocity_tracking_weight,
-      params={"command_name": "waypoint", "std": 0.5},
+      params={
+        "command_name": "waypoint",
+        "std": 0.5,
+        "command_mode": command_mode,
+      },
     ),
     "upright": native_rewards["upright"],
     "dof_pos_limits": native_rewards["dof_pos_limits"],
@@ -168,6 +189,22 @@ def course_g1_navigation_env_cfg(
   }
   if "self_collisions" in native_rewards:
     cfg.rewards["self_collisions"] = native_rewards["self_collisions"]
+  if gait_preservation_scale < 0.0:
+    raise ValueError("gait_preservation_scale must be non-negative")
+  if gait_preservation_scale:
+    gait_reward_names = (
+      "body_ang_vel",
+      "angular_momentum",
+      "foot_clearance",
+      "soft_landing",
+    )
+    for name in gait_reward_names:
+      if name in native_rewards:
+        term = native_rewards[name]
+        if "command_name" in term.params:
+          term.params["command_name"] = None
+        term.weight *= gait_preservation_scale
+        cfg.rewards[name] = term
 
   native_terminations = cfg.terminations
   cfg.terminations = {

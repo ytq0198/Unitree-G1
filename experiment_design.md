@@ -1,101 +1,73 @@
 # Course Project 实验设计
 
-## 1. 项目目标
+## 1. 目标与评分对齐
 
-首要目标是完成可提交、可复现的 Height baseline，使 Unitree G1 在随机生成的 5x5 复杂地形中，根据机体坐标系下的下一 waypoint，直接输出 29 维关节动作并完成路线。随后围绕评分项优化导航进度、路线成功率、AMP 运动质量、深度感知和平滑度。
+本项目训练 Unitree G1 在随机生成的 5x5 复杂地形中，根据机体坐标系下的下一个 waypoint，直接输出 29 维关节动作。优先完成可提交的 Height baseline，再提高路线推进率并完成 Depth 扩展。
 
-## 2. 评分对齐
-
-| 评分项 | 分值 | 实现与证据 |
+| 评分项 | 分值 | 实现与验证 |
 |---|---:|---|
-| 提交格式与 29 维有限动作 | 20 | `policy.pt`、`model.py`、`student.py`；smoke 与 grading toolkit |
-| Route progress | 30 | body-frame waypoint、稠密 progress reward、10 个随机起点评估 |
-| Route success | 10 | waypoint reached 与 route success 奖励、完整路线终止条件 |
-| AMP | 10 | 83 维 AMP state、LSGAN 判别器、风格奖励 |
-| Depth | 10 | `[0.1,5.0]` 裁剪归一化、60x80 深度图、CNN 融合 |
-| Smoothness | 20 | 一阶 action-rate 与二阶动作差分约束、统一评估 |
+| 提交格式与有限动作 | 20 | `policy.pt`、`model.py`、`student.py`；导出后检查形状与有限值 |
+| Route progress | 30 | 机体坐标 waypoint、稠密推进奖励、10 个随机起点评估 |
+| Route success | 10 | waypoint 到达奖励、路线完成奖励与终止条件 |
+| AMP | 10 | 83 维 AMP state、判别器与风格奖励 |
+| Depth | 10 | 60x80 深度图、[0.1, 5.0] 裁剪归一化与 CNN |
+| Smoothness | 20 | 一阶 action-rate 与二阶动作差分约束 |
 
-## 3. 技术结构
+## 2. Lab7 与大作业的关系
 
-### 3.1 可复用基础
+Lab7 学习的是速度指令跟踪下的粗糙地形步态；大作业新增长路线、随机初始朝向、顺序 waypoint、路线指标以及二维局部导航命令。因此不能只重复 Lab7 方法，而要解决三项迁移问题：
 
-- Lab 4：G1 29 维直接关节控制、PPO 训练与 checkpoint 工作流。
-- Lab 7：AMP state、判别器与风格奖励、粗糙地形、Height/Depth 感知链路。
-- 同学 Lab 7：仅作为结构、超参数和行为基线参考，不直接当作课程大作业结果。
+1. 将世界坐标 waypoint 变换为机体坐标，并限制为局部期望速度。
+2. 将 Lab7 的三维 `[vx, vy, yaw_rate]` actor 输入迁移为二维 `[vx, vy]`，保留其余观察和网络参数。
+3. 采用低学习率、低探索噪声和朝向课程学习，避免导航梯度破坏已有步态。
 
-### 3.2 大作业新增能力
+## 3. 奖励与约束
 
-1. 将世界坐标 waypoint 按机器人 yaw 变换到机体坐标系。
-2. 将长路线分解为顺序局部 waypoint，并使用 progress、reached、success 三层奖励。
-3. 对随机起点和随机路线训练，并以 10 个独立随机起点统一评估。
-4. 在导航奖励之外保留安全约束、AMP 风格奖励和二阶平滑约束。
+作业规定的导航奖励保持不变：
 
-### 3.3 奖励层级
+```text
+r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
+```
 
-导航奖励：
+`RewardManager` 会乘以 `dt=0.02`，因此环境向 `student.navigation_reward()` 传入距离改善率 `(d[t-1]-d[t])/dt`，积分后仍得到真实距离改善。
 
-\[
-r_{nav}=4r_{progress}+0.5r_{reached}+5r_{success}
-\]
+总训练信号还包括 waypoint 速度跟踪、alive/upright、关节限位、自碰撞、AMP 风格奖励和动作平滑惩罚。可选 gait-preservation 模块恢复 Lab7 中与二维命令兼容的躯干角速度、角动量、足端净空和落脚冲击约束；它用于消融，不改变正式路线指标。
 
-环境奖励由导航项、安全约束和平滑惩罚组成；AmpPPO 再追加按控制步长缩放的 AMP 风格奖励。具体权重以代码配置和每次实验记录为准。
+## 4. 训练路线
 
-由于环境的 RewardManager 会将每步奖励乘以控制周期 `dt=0.02`，传给 `student.navigation_reward()` 的 `progress` 使用距离改善率 `(d_{t-1}-d_t)/dt`。这样积分后的稠密项仍为 `4(d_{t-1}-d_t)`，不会把本来已经按步计算的距离改善额外缩小 50 倍；`student.py` 规定的公式保持不变。
+### 阶段 A：Height baseline
 
-## 4. 分阶段计划
+- 完成五个规定函数、smoke、单元测试和提交导出。
+- 从 Lab7 PPO locomotion checkpoint 迁移大网络 `512-256-128`。
+- 使用 aligned-heading 课程学习获得可行走导航策略，再转入随机朝向。
+- 多 checkpoint 统一评估，不默认采用最后一次保存。
 
-### 阶段 A：Height Baseline
+### 阶段 B：稳定性与导航优化
 
-- 完成 `student.py` 五个公式与纯函数测试。
-- 在服务器 `summer` 环境完成 Height smoke。
-- 使用小规模训练确认 reward、reset、checkpoint 和评估链路。
-- 使用实测稳定的 64 environments、1000 iterations 完成首版 baseline，随后按需要增加 iterations，并完成 10 起点评估和提交打包。
+- 对比命令速度、速度跟踪权重、探索标准差和 gait-preservation scale。
+- 每组先做 3 起点筛选，再对候选做 10 起点、5000 步正式评估。
+- 主要指标为 route progress；同时报告存活步数、跌倒率和平滑度。
 
-完成标准：smoke 通过，训练无 NaN，能导出提交包，grading toolkit 可运行，并得到第一组 route progress、route success、smoothness 指标。
+### 阶段 C：Depth 与高分扩展
 
-### 阶段 B：Baseline 诊断与稳定性
+- 保持 Height actor 的本体感知和导航结构，引入 60x80 depth encoder。
+- 优先采用 Height teacher 到 Depth student 的蒸馏/微调，降低从零训练成本。
+- 对 Height/Depth 做相同随机起点评估，报告复杂地形上的增益与计算开销。
 
-- 检查 TensorBoard 曲线、摔倒位置、waypoint 切换和动作幅度。
-- 对多个 checkpoint 做统一评估，不默认选择最后一个。
-- 使用至少 2 个训练 seed 验证主要结论的稳定性。
-- 若随机初始化只学会站立而没有导航，则使用 Lab 7 Height checkpoint warm start：将 3 维 `[vx, vy, yaw-rate]` command 映射为 2 维 body-frame waypoint `[x, y]`，删除 yaw-rate 输入列，保留其余观测、隐藏层、动作输出和 AMP 判别器参数。
-- Warm start 微调将 PPO 初始学习率从 `1e-3` 降至 `1e-4`，降低导航任务早期梯度对已学步态的破坏；随机初始化实验仍保留 `1e-3`。
-- Actor 的 2 维 command 保留 body-frame waypoint 的方向，但将模长限制为 `0.6`：远处目标转为局部期望速度，近处目标按距离自动减速。该适配匹配 Lab 7 的平面速度命令尺度，真实 waypoint 位移、奖励和路线指标均不改变。
-- 增加 waypoint-conditioned velocity tracking 辅助奖励 `exp(-||v_cmd-v_body||^2/0.5^2)`，直接约束机器人沿局部目标方向稳定行走。它只使用 actor 已有的局部 command 和本体速度，不泄露全局路线信息；规定的 progress/reached/success 导航奖励仍负责最终任务目标。
+### 阶段 D：最终交付
 
-### 阶段 C：得分优化
-
-- 导航：奖励权重、waypoint threshold、episode horizon、局部目标尺度或归一化。
-- 稳定性：安全奖励、动作一阶与二阶约束、AMP scale。
-- 感知：在 Height 主线稳定后接入 Depth，先 smoke 再扩大预算。
-- 训练效率：当前完整 primitive 场景在课程服务器的 MuJoCo-Warp 下单进程稳定上限为 64 environments；使用多 GPU 独立进程并行 seed/配置，而不在单进程继续增加 nworld。
-
-### 阶段 D：消融与最终提交
-
-- 导航奖励分项消融。
-- Smoothness 权重与 AMP scale 对照。
-- Height 与 Depth 同协议比较。
-- 固定代码 commit，运行 10 起点评估、视频、提交打包和 grading toolkit。
+- 固定最佳 commit 和 checkpoint。
+- 生成视频、训练曲线、路线进度与消融图表。
+- 构建严格三文件提交包，并运行课程 grading toolkit。
+- 报告 motion 数据来源、许可、哈希、随机种子和完整训练配置。
 
 ## 5. 实验规范
 
-每次正式训练必须记录：日期、Git commit、服务器路径、GPU、模式、seed、环境数、iterations、steps per env、关键权重、运行目录、最佳 checkpoint、评估指标和异常情况。
+每次正式实验记录日期、Git commit、服务器路径、GPU、seed、环境数、迭代数、关键权重、运行目录、候选 checkpoint、独立评估指标与异常情况。大型 checkpoint 和 TensorBoard 日志保留在服务器；GitHub 只保存代码、轻量结果和 Markdown 文档。
 
-大型 checkpoint、视频和 TensorBoard 日志默认保存在服务器，不直接提交 GitHub；GitHub 保存代码、轻量配置、指标 JSON 和两份 Markdown 文档。
+## 6. 下一阶段优先级
 
-## 6. 当前优先级
-
-1. Height baseline 可运行、可评估、可提交。
-2. 提高 route progress 和 route success。
-3. 在不明显损失导航能力的前提下降低 smoothness。
-4. 验证 AMP 权重。
-5. 完成 Depth bonus。
-
-## 7. 待验证假设
-
-- H1：body-frame waypoint 可以使策略泛化到不同位置和初始朝向。
-- H2：三层导航奖励比仅终点奖励更容易学习长路线。
-- H3：适量二阶平滑惩罚能降低动作突变且不显著降低成功率。
-- H4：AMP scale 存在导航完成度与自然步态之间的最优区间。
-- H5：Depth 在困难地形上的收益能够覆盖其训练成本和优化难度。
-- H6：Lab 7 locomotion warm start 可以避免从随机策略同时学习站立、行走与导航的优化困难。
+1. 对当前最佳 Height 模型生成视频并运行 grading toolkit。
+2. 针对随机转向跌倒问题设计更渐进的 heading curriculum，而不是继续盲目延长训练。
+3. 完成 Depth smoke 与 Height-to-Depth 初始化，争取 Depth 10 分。
+4. 完成 AMP scale、平滑权重和感知模式消融，为最终报告提供可信证据。

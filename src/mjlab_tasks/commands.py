@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 from mjlab.entity import Entity
@@ -53,12 +54,25 @@ class WaypointCommand(CommandTerm):
     expected = (self.num_envs, 2)
     if tuple(displacement.shape) != expected or not torch.isfinite(displacement).all():
       raise ValueError("waypoint_in_body_frame() must return a finite [B, 2] tensor")
-    # Reuse Lab 7's planar-velocity semantics while retaining waypoint
-    # direction. Distant targets command a bounded speed and nearby targets
-    # naturally slow down.
     distance = torch.norm(displacement, dim=-1, keepdim=True)
-    scale = torch.clamp(self.cfg.max_command_speed / distance.clamp_min(1.0e-6), max=1.0)
-    return displacement * scale
+    if self.cfg.command_mode == "xy":
+      scale = torch.clamp(
+        self.cfg.max_command_speed / distance.clamp_min(1.0e-6), max=1.0
+      )
+      return displacement * scale
+    heading_error = torch.atan2(displacement[:, 1], displacement[:, 0])
+    forward = torch.clamp(distance.squeeze(-1), max=self.cfg.max_command_speed)
+    forward_scale = torch.clamp(torch.cos(heading_error), min=0.0)
+    forward = torch.maximum(
+      forward * forward_scale,
+      torch.full_like(forward, self.cfg.min_turning_speed),
+    )
+    yaw_rate = torch.clamp(
+      self.cfg.heading_stiffness * heading_error,
+      -self.cfg.max_yaw_rate,
+      self.cfg.max_yaw_rate,
+    )
+    return torch.stack((forward, yaw_rate), dim=-1)
 
   def _resample_command(self, env_ids: torch.Tensor) -> None:
     self.route_index[env_ids] = 1
@@ -100,6 +114,10 @@ class WaypointCommandCfg(CommandTermCfg):
   student_path: str
   waypoint_threshold: float = 0.45
   max_command_speed: float = 0.6
+  max_yaw_rate: float = 0.25
+  min_turning_speed: float = 0.4
+  heading_stiffness: float = 0.5
+  command_mode: Literal["xy", "forward_yaw"] = "xy"
 
   def build(self, env) -> WaypointCommand:
     return WaypointCommand(self, env)
