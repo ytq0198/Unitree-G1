@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 import sys
-from importlib.metadata import PackageNotFoundError, version
+import json
+from importlib.metadata import PackageNotFoundError, distribution, version
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -37,9 +38,30 @@ def configure_local_sources() -> None:
   )
   Path(os.environ["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
   Path(os.environ["WARP_CACHE_PATH"]).mkdir(parents=True, exist_ok=True)
-  text = str(PROJECT_ROOT)
-  if text not in sys.path:
-    sys.path.insert(0, text)
+  paths = [PROJECT_ROOT]
+
+  # The course server uses an editable mujoco_warp checkout whose package
+  # imports through ``source.mujoco_warp``. Locate its workspace without
+  # hard-coding the Lab 4 path or changing that dependency checkout.
+  try:
+    direct_url = distribution("mujoco-warp").read_text("direct_url.json")
+    editable_root = None
+    if direct_url:
+      url = json.loads(direct_url).get("url", "")
+      if url.startswith("file://"):
+        editable_root = Path(url.removeprefix("file://"))
+    if editable_root is not None:
+      for candidate in (editable_root, *editable_root.parents):
+        if (candidate / "source" / "mujoco_warp").exists():
+          paths.append(candidate)
+          break
+  except (PackageNotFoundError, json.JSONDecodeError):
+    pass
+
+  for path in paths:
+    text = str(path)
+    if text not in sys.path:
+      sys.path.insert(0, text)
 
 
 __all__ = [

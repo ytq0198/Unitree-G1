@@ -39,7 +39,8 @@
 | ID | 日期 | 范围 | 配置 | 结果 | 状态 |
 |---|---|---|---|---|---|
 | LOCAL-001 | 2026-08-12 | `student.py` 纯函数 | CPU，7 项 PyTorch unittest + `py_compile` | 7/7 通过，语法检查通过 | 完成 |
-| SERVER-001 | 待运行 | Height smoke | 32 env，16 steps，GPU | 待运行 | 未开始 |
+| SERVER-UT-001 | 2026-08-12 | `student.py` 纯函数 | 服务器 `summer`，GPU 3 可见 | 7/7 通过 | 完成 |
+| SERVER-001 | 2026-08-12 | Height smoke | 32 env，16 steps，GPU 3 | 首次导入失败：editable `mujoco_warp` 缺少 workspace root；已修复自动路径发现，待复测 | 进行中 |
 | TRAIN-H0 | 待运行 | Height baseline | 2048 env，1000 iterations，seed 23 | 待运行 | 未开始 |
 
 ## 5. Baseline 指标
@@ -55,6 +56,7 @@
 - 本地工作区根目录的 `.git` 已确认是空目录，不是有效仓库。需先确认远端仓库结构，再在真正的代码目录建立独立 checkout，避免把课程 PPT、视频和其他 Lab 混入仓库。
 - `gh auth` 在受限执行环境中无法联网验证，推送前需在允许网络访问的环境再次确认。
 - Height baseline 未经物理 smoke 和训练验证，当前只能确认公式层实现状态。
+- 首次物理 smoke 暴露出服务器 editable `mujoco_warp` 的 `source.*` 导入路径问题。修复只在本项目运行时增加只读搜索路径，不修改 Lab 4 依赖目录或用户配置。
 - 参考 Lab 7 checkpoint 的 Actor 输入结构与大作业可能不兼容，迁移前必须检查 state dict 和观测维度。
 
 ## 7. 下一步
