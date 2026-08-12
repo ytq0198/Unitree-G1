@@ -20,6 +20,7 @@
 - 支持 Lab7 checkpoint 迁移、可配置网络宽度、低噪声 warm start、朝向课程、命令速度和步态保持约束。
 - 评估额外报告存活步数、跌倒率和 timeout rate，防止仅按训练奖励挑选模型。
 - 本地测试 10/10 通过，关键 Python 文件通过语法检查。
+- Depth smoke 已通过：2 env、16 steps、29 维动作、83 维 AMP state，深度张量为 `[2,1,60,80]`。
 
 ## 3. 实验记录
 
@@ -66,6 +67,8 @@ outputs/submission/student.py
 
 `policy.pt` 可加载，并对 `[2,285]` 输入产生全为有限数值的 `[2,29]` 输出。该行为与 Lab7 官方导出适配器一致；环境的 joint-position action term 负责后续动作缩放。导出时使用与 checkpoint 一致的 `512-256-128` 网络，已修复旧入口默认按小网络重建的问题。
 
+已生成 H9 最佳模型的 300 帧评估视频 `outputs/evaluation.mp4`：H.264、320x240、50 FPS、6 秒；抽查首帧、中间帧和末帧均非空白画面。
+
 ## 6. 已验证结论
 
 1. Lab7 warm start 有效，但只有同时对齐输入布局、命令语义、网络结构、学习率和探索噪声才不会破坏步态。
@@ -76,7 +79,7 @@ outputs/submission/student.py
 
 ## 7. 下一步
 
-- 生成 H9 视频并运行 grading toolkit，锁定当前可交付 baseline。
+- 运行 grading toolkit，进一步锁定当前可交付 baseline。
 - 设计分阶段 heading curriculum：窄角度稳定后逐步扩大，并在每阶段使用独立验证早停。
 - 完成 Depth smoke、策略结构和迁移训练，优先取得 Depth 功能分。
 - 生成 TensorBoard 曲线、消融表和路线可视化，用于最终展示与报告。
