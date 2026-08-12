@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import math
 import unittest
 from pathlib import Path
@@ -7,12 +8,23 @@ from pathlib import Path
 import torch
 
 import student
-from src.paths import _path_from_file_url
+
+
+def load_paths_module():
+  path = Path(__file__).resolve().parents[1] / "src" / "paths.py"
+  spec = importlib.util.spec_from_file_location("course_project_paths", path)
+  if spec is None or spec.loader is None:
+    raise ImportError(path)
+  module = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(module)
+  return module
 
 
 class StudentFormulaTests(unittest.TestCase):
   def test_editable_file_url_decodes_spaces(self) -> None:
-    path = _path_from_file_url("file:///mnt/localDisk3/RL%20learning/mujoco_warp")
+    path = load_paths_module()._path_from_file_url(
+      "file:///mnt/localDisk3/RL%20learning/mujoco_warp"
+    )
     self.assertEqual(path, Path("/mnt/localDisk3/RL learning/mujoco_warp"))
 
   def test_build_amp_state_shape_and_order(self) -> None:
