@@ -45,15 +45,20 @@ class WaypointCommand(CommandTerm):
 
   @property
   def command(self) -> torch.Tensor:
-    command = self._body_frame(
+    displacement = self._body_frame(
       self.robot.data.root_link_pos_w,
       self.robot.data.root_link_quat_w,
       self.current_waypoint_w,
     )
     expected = (self.num_envs, 2)
-    if tuple(command.shape) != expected or not torch.isfinite(command).all():
+    if tuple(displacement.shape) != expected or not torch.isfinite(displacement).all():
       raise ValueError("waypoint_in_body_frame() must return a finite [B, 2] tensor")
-    return command
+    # Reuse Lab 7's planar-velocity semantics while retaining waypoint
+    # direction. Distant targets command a bounded speed and nearby targets
+    # naturally slow down.
+    distance = torch.norm(displacement, dim=-1, keepdim=True)
+    scale = torch.clamp(self.cfg.max_command_speed / distance.clamp_min(1.0e-6), max=1.0)
+    return displacement * scale
 
   def _resample_command(self, env_ids: torch.Tensor) -> None:
     self.route_index[env_ids] = 1
@@ -94,6 +99,7 @@ class WaypointCommandCfg(CommandTermCfg):
   route: tuple[tuple[float, float], ...]
   student_path: str
   waypoint_threshold: float = 0.45
+  max_command_speed: float = 0.6
 
   def build(self, env) -> WaypointCommand:
     return WaypointCommand(self, env)

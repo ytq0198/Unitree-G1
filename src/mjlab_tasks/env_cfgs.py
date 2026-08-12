@@ -30,6 +30,7 @@ from .observations import (
   route_complete,
   route_progress_metric,
   student_smoothness_penalty,
+  waypoint_velocity_tracking,
 )
 from .safe_events import reset_joints_by_offset_batched
 
@@ -45,6 +46,9 @@ def course_g1_navigation_env_cfg(
   student_path: str | Path = DEFAULT_STUDENT_PATH,
   scene_seed: int = 23,
   random_start: bool = True,
+  navigation_reward_weight: float = 1.0,
+  smoothness_reward_weight: float = -0.05,
+  velocity_tracking_weight: float = 2.0,
 ) -> ManagerBasedRlEnvCfg:
   """Create the physical navigation task without a low-level policy layer."""
   if observation_mode not in ("height", "depth"):
@@ -140,16 +144,25 @@ def course_g1_navigation_env_cfg(
   cfg.rewards = {
     "navigation_task": RewardTermCfg(
       func=NavigationTaskReward,
-      weight=1.0,
-      params={"command_name": "waypoint", "student_path": student_path},
+      weight=navigation_reward_weight,
+      params={
+        "command_name": "waypoint",
+        "student_path": student_path,
+        "step_dt": 0.02,
+      },
     ),
     "alive": RewardTermCfg(func=env_mdp.is_alive, weight=0.5),
+    "waypoint_velocity_tracking": RewardTermCfg(
+      func=waypoint_velocity_tracking,
+      weight=velocity_tracking_weight,
+      params={"command_name": "waypoint", "std": 0.5},
+    ),
     "upright": native_rewards["upright"],
     "dof_pos_limits": native_rewards["dof_pos_limits"],
     "action_rate_l2": native_rewards["action_rate_l2"],
     "student_smoothness": RewardTermCfg(
       func=student_smoothness_penalty,
-      weight=-0.05,
+      weight=smoothness_reward_weight,
       params={"student_path": student_path},
     ),
   }

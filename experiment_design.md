@@ -40,6 +40,8 @@ r_{nav}=4r_{progress}+0.5r_{reached}+5r_{success}
 
 环境奖励由导航项、安全约束和平滑惩罚组成；AmpPPO 再追加按控制步长缩放的 AMP 风格奖励。具体权重以代码配置和每次实验记录为准。
 
+由于环境的 RewardManager 会将每步奖励乘以控制周期 `dt=0.02`，传给 `student.navigation_reward()` 的 `progress` 使用距离改善率 `(d_{t-1}-d_t)/dt`。这样积分后的稠密项仍为 `4(d_{t-1}-d_t)`，不会把本来已经按步计算的距离改善额外缩小 50 倍；`student.py` 规定的公式保持不变。
+
 ## 4. 分阶段计划
 
 ### 阶段 A：Height Baseline
@@ -56,6 +58,10 @@ r_{nav}=4r_{progress}+0.5r_{reached}+5r_{success}
 - 检查 TensorBoard 曲线、摔倒位置、waypoint 切换和动作幅度。
 - 对多个 checkpoint 做统一评估，不默认选择最后一个。
 - 使用至少 2 个训练 seed 验证主要结论的稳定性。
+- 若随机初始化只学会站立而没有导航，则使用 Lab 7 Height checkpoint warm start：将 3 维 `[vx, vy, yaw-rate]` command 映射为 2 维 body-frame waypoint `[x, y]`，删除 yaw-rate 输入列，保留其余观测、隐藏层、动作输出和 AMP 判别器参数。
+- Warm start 微调将 PPO 初始学习率从 `1e-3` 降至 `1e-4`，降低导航任务早期梯度对已学步态的破坏；随机初始化实验仍保留 `1e-3`。
+- Actor 的 2 维 command 保留 body-frame waypoint 的方向，但将模长限制为 `0.6`：远处目标转为局部期望速度，近处目标按距离自动减速。该适配匹配 Lab 7 的平面速度命令尺度，真实 waypoint 位移、奖励和路线指标均不改变。
+- 增加 waypoint-conditioned velocity tracking 辅助奖励 `exp(-||v_cmd-v_body||^2/0.5^2)`，直接约束机器人沿局部目标方向稳定行走。它只使用 actor 已有的局部 command 和本体速度，不泄露全局路线信息；规定的 progress/reached/success 导航奖励仍负责最终任务目标。
 
 ### 阶段 C：得分优化
 
@@ -92,3 +98,4 @@ r_{nav}=4r_{progress}+0.5r_{reached}+5r_{success}
 - H3：适量二阶平滑惩罚能降低动作突变且不显著降低成功率。
 - H4：AMP scale 存在导航完成度与自然步态之间的最优区间。
 - H5：Depth 在困难地形上的收益能够覆盖其训练成本和优化难度。
+- H6：Lab 7 locomotion warm start 可以避免从随机策略同时学习站立、行走与导航的优化困难。

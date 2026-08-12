@@ -66,6 +66,9 @@ class NavigationTaskReward(ManagerTermBase):
   def __init__(self, cfg, env: ManagerBasedRlEnv) -> None:
     super().__init__(env)
     self.command_name = cfg.params["command_name"]
+    self.step_dt = float(cfg.params["step_dt"])
+    if self.step_dt <= 0.0:
+      raise ValueError("navigation reward step_dt must be positive")
     self.reward_fn = load_student_function(
       cfg.params["student_path"], "navigation_reward"
     )
@@ -83,7 +86,9 @@ class NavigationTaskReward(ManagerTermBase):
       dim=-1,
     )
     fresh = torch.isnan(self.previous_distance)
-    progress = self.previous_distance - distance
+    # RewardManager integrates rewards with dt. Express dense progress as a
+    # rate so the integrated term remains the actual distance improvement.
+    progress = (self.previous_distance - distance) / self.step_dt
     progress[fresh] = 0.0
     self.previous_distance = distance.detach()
     reward = self.reward_fn(
@@ -115,6 +120,25 @@ def student_smoothness_penalty(
   if tuple(penalty.shape) != (env.num_envs,) or not torch.isfinite(penalty).all():
     raise ValueError("smoothness_penalty() must return a finite [B] tensor")
   return penalty
+
+
+def waypoint_velocity_tracking(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  std: float = 0.5,
+) -> torch.Tensor:
+  """Reward stable tracking of the local velocity implied by a waypoint."""
+  if std <= 0.0:
+    raise ValueError("velocity tracking std must be positive")
+  robot: Entity = env.scene["robot"]
+  command = env.command_manager.get_term(command_name)
+  if not isinstance(command, WaypointCommand):
+    raise TypeError("waypoint velocity tracking requires WaypointCommand")
+  planar_error = torch.sum(
+    torch.square(command.command - robot.data.root_link_lin_vel_b[:, :2]), dim=-1
+  )
+  vertical_error = torch.square(robot.data.root_link_lin_vel_b[:, 2])
+  return torch.exp(-(planar_error + vertical_error) / std**2)
 
 
 def route_complete(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:

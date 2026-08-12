@@ -41,6 +41,8 @@ def course_g1_navigation_ppo_runner_cfg(
   observation_mode: ObservationMode = "height",
   student_path: str | Path = DEFAULT_STUDENT_PATH,
   motion_path: str | Path = DEFAULT_MOTION_PATH,
+  amp_reward_scale: float = 0.5,
+  learning_rate: float = 1.0e-3,
 ) -> RslRlOnPolicyRunnerCfg:
   obs_groups: dict[str, tuple[str, ...]]
   if observation_mode == "depth":
@@ -77,7 +79,7 @@ def course_g1_navigation_ppo_runner_cfg(
     entropy_coef=0.01,
     num_learning_epochs=2,
     num_mini_batches=2,
-    learning_rate=1.0e-3,
+    learning_rate=learning_rate,
     schedule="adaptive",
     gamma=0.99,
     lam=0.95,
@@ -85,6 +87,7 @@ def course_g1_navigation_ppo_runner_cfg(
     max_grad_norm=1.0,
     motion_path=str(Path(motion_path).resolve()),
     student_path=str(Path(student_path).resolve()),
+    amp_reward_scale=amp_reward_scale,
   )
   return RslRlOnPolicyRunnerCfg(
     actor=actor,

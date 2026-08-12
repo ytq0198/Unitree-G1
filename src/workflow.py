@@ -166,16 +166,32 @@ def train(
   device: str = "cuda:0",
   seed: int = 23,
   student_file: str | Path | None = None,
+  init_checkpoint: str | Path | None = None,
+  navigation_reward_weight: float = 1.0,
+  smoothness_reward_weight: float = -0.05,
+  velocity_tracking_weight: float = 2.0,
+  amp_reward_scale: float = 0.5,
+  learning_rate: float = 1.0e-3,
 ) -> Path:
   """Train direct 29-joint navigation AMP-PPO and return its run directory."""
   if device.startswith("cuda") and not torch.cuda.is_available():
     raise RuntimeError(f"Requested {device}, but CUDA is not available")
   student_path = _student_path(student_file)
   env_cfg = course_g1_navigation_env_cfg(
-    mode, student_path=student_path, scene_seed=seed
+    mode,
+    student_path=student_path,
+    scene_seed=seed,
+    navigation_reward_weight=navigation_reward_weight,
+    smoothness_reward_weight=smoothness_reward_weight,
+    velocity_tracking_weight=velocity_tracking_weight,
   )
   env_cfg.scene.num_envs = num_envs
-  agent_cfg = course_g1_navigation_ppo_runner_cfg(mode, student_path=student_path)
+  agent_cfg = course_g1_navigation_ppo_runner_cfg(
+    mode,
+    student_path=student_path,
+    amp_reward_scale=amp_reward_scale,
+    learning_rate=learning_rate,
+  )
   agent_cfg.max_iterations = iterations
   agent_cfg.num_steps_per_env = steps_per_env
   agent_cfg.save_interval = max(1, min(50, iterations))
@@ -189,6 +205,8 @@ def train(
   runner = MjlabOnPolicyRunner(
     wrapped, asdict(agent_cfg), log_dir=str(log_dir), device=device
   )
+  if init_checkpoint is not None:
+    runner.load(str(Path(init_checkpoint).resolve()), load_cfg=LOAD_CFG)
   try:
     runner.learn(num_learning_iterations=iterations)
   finally:

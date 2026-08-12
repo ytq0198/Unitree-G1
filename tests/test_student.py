@@ -8,6 +8,7 @@ from pathlib import Path
 import torch
 
 import student
+from prepare_lab7_warmstart import COMMAND_START, remove_yaw_command_column
 
 
 def load_paths_module():
@@ -26,6 +27,15 @@ class StudentFormulaTests(unittest.TestCase):
       "file:///mnt/localDisk3/RL%20learning/mujoco_warp"
     )
     self.assertEqual(path, Path("/mnt/localDisk3/RL learning/mujoco_warp"))
+
+  def test_warmstart_removes_only_yaw_command_feature(self) -> None:
+    source = torch.arange(286, dtype=torch.float32).unsqueeze(0)
+    adapted = remove_yaw_command_column(source)
+    self.assertEqual(adapted.shape, (1, 285))
+    torch.testing.assert_close(adapted[..., : COMMAND_START + 2], source[..., : COMMAND_START + 2])
+    torch.testing.assert_close(
+      adapted[..., COMMAND_START + 2 :], source[..., COMMAND_START + 3 :]
+    )
 
   def test_build_amp_state_shape_and_order(self) -> None:
     parts = (
@@ -73,6 +83,15 @@ class StudentFormulaTests(unittest.TestCase):
       torch.tensor([False, True]),
     )
     torch.testing.assert_close(reward, torch.tensor([0.9, 4.2]))
+
+  def test_progress_rate_cancels_environment_dt_scaling(self) -> None:
+    distance_improvement = torch.tensor([0.03, -0.01])
+    step_dt = 0.02
+    progress_rate = distance_improvement / step_dt
+    integrated_progress_reward = 4.0 * progress_rate * step_dt
+    torch.testing.assert_close(
+      integrated_progress_reward, 4.0 * distance_improvement
+    )
 
   def test_smoothness_zero_for_linear_action_sequence(self) -> None:
     previous_previous = torch.zeros(2, 29)

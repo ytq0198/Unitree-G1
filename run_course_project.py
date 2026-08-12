@@ -23,6 +23,12 @@ def main() -> None:
   parser.add_argument("--frames", type=int, default=150)
   parser.add_argument("--seed", type=int, default=23)
   parser.add_argument("--checkpoint")
+  parser.add_argument("--init-checkpoint")
+  parser.add_argument("--navigation-weight", type=float, default=1.0)
+  parser.add_argument("--smoothness-weight", type=float, default=-0.05)
+  parser.add_argument("--velocity-tracking-weight", type=float, default=2.0)
+  parser.add_argument("--amp-scale", type=float, default=0.5)
+  parser.add_argument("--learning-rate", type=float, default=1.0e-3)
   args = parser.parse_args()
 
   from src import workflow
@@ -54,6 +60,12 @@ def main() -> None:
       device=args.device,
       seed=args.seed,
       student_file=student,
+      init_checkpoint=args.init_checkpoint,
+      navigation_reward_weight=args.navigation_weight,
+      smoothness_reward_weight=args.smoothness_weight,
+      velocity_tracking_weight=args.velocity_tracking_weight,
+      amp_reward_scale=args.amp_scale,
+      learning_rate=args.learning_rate,
     )
     print(run_dir)
     return
