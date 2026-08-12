@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import math
 import unittest
+from pathlib import Path
 
 import torch
 
 import student
+from src.paths import _path_from_file_url
 
 
 class StudentFormulaTests(unittest.TestCase):
+  def test_editable_file_url_decodes_spaces(self) -> None:
+    path = _path_from_file_url("file:///mnt/localDisk3/RL%20learning/mujoco_warp")
+    self.assertEqual(path, Path("/mnt/localDisk3/RL learning/mujoco_warp"))
+
   def test_build_amp_state_shape_and_order(self) -> None:
     parts = (
       torch.full((2, 29), 1.0),

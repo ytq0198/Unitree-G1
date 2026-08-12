@@ -7,10 +7,20 @@ import sys
 import json
 from importlib.metadata import PackageNotFoundError, distribution, version
 from pathlib import Path
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LAB_ROOT = PROJECT_ROOT.parent
 MJLAB_VERSION = "1.5.0"
+
+
+def _path_from_file_url(url: str) -> Path | None:
+  """Decode a local ``file://`` URL, including spaces encoded as ``%20``."""
+  parsed = urlparse(url)
+  if parsed.scheme != "file":
+    return None
+  return Path(url2pathname(unquote(parsed.path)))
 
 
 def require_mjlab_version() -> None:
@@ -48,8 +58,7 @@ def configure_local_sources() -> None:
     editable_root = None
     if direct_url:
       url = json.loads(direct_url).get("url", "")
-      if url.startswith("file://"):
-        editable_root = Path(url.removeprefix("file://"))
+      editable_root = _path_from_file_url(url)
     if editable_root is not None:
       for candidate in (editable_root, *editable_root.parents):
         if (candidate / "source" / "mujoco_warp").exists():
