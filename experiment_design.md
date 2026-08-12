@@ -47,7 +47,7 @@ r_{nav}=4r_{progress}+0.5r_{reached}+5r_{success}
 - 完成 `student.py` 五个公式与纯函数测试。
 - 在服务器 `summer` 环境完成 Height smoke。
 - 使用小规模训练确认 reward、reset、checkpoint 和评估链路。
-- 扩大到 2048 environments、1000 iterations，完成 10 起点评估和提交打包。
+- 使用实测稳定的 64 environments、1000 iterations 完成首版 baseline，随后按需要增加 iterations，并完成 10 起点评估和提交打包。
 
 完成标准：smoke 通过，训练无 NaN，能导出提交包，grading toolkit 可运行，并得到第一组 route progress、route success、smoothness 指标。
 
@@ -62,7 +62,7 @@ r_{nav}=4r_{progress}+0.5r_{reached}+5r_{success}
 - 导航：奖励权重、waypoint threshold、episode horizon、局部目标尺度或归一化。
 - 稳定性：安全奖励、动作一阶与二阶约束、AMP scale。
 - 感知：在 Height 主线稳定后接入 Depth，先 smoke 再扩大预算。
-- 训练效率：根据显存和采样速度调整 environments、mini-batches 和并行实验。
+- 训练效率：当前完整 primitive 场景在课程服务器的 MuJoCo-Warp 下单进程稳定上限为 64 environments；使用多 GPU 独立进程并行 seed/配置，而不在单进程继续增加 nworld。
 
 ### 阶段 D：消融与最终提交
 

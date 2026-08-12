@@ -48,7 +48,7 @@ def main() -> None:
   if args.command == "train":
     run_dir = workflow.train(
       args.mode,
-      num_envs=args.num_envs or (2048 if args.mode == "height" else 32),
+      num_envs=args.num_envs or (64 if args.mode == "height" else 32),
       iterations=args.iterations,
       steps_per_env=args.steps_per_env,
       device=args.device,

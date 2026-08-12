@@ -28,7 +28,7 @@ python run_course_project.py smoke --mode height --device cuda:0
 
 ```bash
 python run_course_project.py train --mode height --device cuda:0 \
-  --num-envs 2048 --iterations 1000 --seed 23
+  --num-envs 64 --iterations 1000 --seed 23
 
 python run_course_project.py eval --mode height --device cuda:0 \
   --checkpoint outputs/rsl_rl/<run>/model_<iteration>.pt \
@@ -41,3 +41,7 @@ The evolving design and verified results are recorded in:
 - `experiment_report.md`
 
 Training checkpoints, videos, TensorBoard logs, and generated submissions are intentionally excluded from Git.
+
+The current course-server MuJoCo-Warp build is stable with 64 copies of the
+full primitive-geometry scene per process. Use separate GPUs/processes for
+parallel runs rather than increasing a single process beyond this measured limit.

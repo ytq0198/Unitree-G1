@@ -160,7 +160,7 @@ def smoke(
 def train(
   mode: ObservationMode = "height",
   *,
-  num_envs: int = 2048,
+  num_envs: int = 64,
   iterations: int = 1000,
   steps_per_env: int = 24,
   device: str = "cuda:0",

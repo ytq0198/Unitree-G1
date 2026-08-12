@@ -58,7 +58,10 @@ def course_g1_navigation_env_cfg(
     random_start=random_start,
   )
   cfg = unitree_g1_rough_env_cfg(play=play)
-  cfg.scene.num_envs = 32 if play else 2048
+  # This full 70 m primitive-geometry scene is stable up to 64 worlds with
+  # the course server's MuJoCo-Warp build. Larger batches are run as separate
+  # processes/GPUs instead of increasing nworld in one process.
+  cfg.scene.num_envs = 32 if play else 64
   cfg.scene.extent = 7.0
   cfg.scene.terrain = TerrainEntityCfg(
     terrain_type="generator",

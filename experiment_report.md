@@ -40,7 +40,11 @@
 |---|---|---|---|---|---|
 | LOCAL-001 | 2026-08-12 | `student.py` 纯函数 | CPU，7 项 PyTorch unittest + `py_compile` | 7/7 通过，语法检查通过 | 完成 |
 | SERVER-UT-001 | 2026-08-12 | `student.py` 纯函数 | 服务器 `summer`，GPU 3 可见 | 7/7 通过 | 完成 |
-| SERVER-001 | 2026-08-12 | Height smoke | 32 env，16 steps，GPU 3 | 首次导入失败：editable `mujoco_warp` 缺少 workspace root；已修复自动路径发现，待复测 | 进行中 |
+| SERVER-001 | 2026-08-12 | Height smoke | 32 env，16 steps，GPU 3 | 通过：29 维动作、83 维 AMP state、奖励有限、32 次手动 reset | 完成 |
+| TRAIN-SHORT-001 | 2026-08-12 | Height 短训练 | 64 env，10 iterations，24 steps/env，seed 23，GPU 3 | 通过：15,360 steps，约 2,000-2,200 steps/s，生成 `model_0.pt`、`model_9.pt`；AMP 判别器 loss 约 7.6 降至 5.3 | 完成 |
+| TRAIN-SCALE-001 | 2026-08-12 | Height 规模基准 | 128/256/512 env，5/5/20 iterations，GPU 2/3 | 三种规模均在首次 reset 前触发 MuJoCo-Warp CUDA illegal memory access；进程退出后 GPU 正常释放 | 失败并归档 |
+| EVAL-SHORT-001 | 2026-08-12 | 短训练 checkpoint 加载 | `model_9.pt`，1 start，300 steps，seed 101 | progress 0.0108，success 0，smoothness 0.0213；评估链路通过 | 完成 |
+| TRAIN-H0 | 2026-08-12 | Height baseline | 64 env，1000 iterations，24 steps/env，seed 23，GPU 3 | 待运行 | 未开始 |
 | TRAIN-H0 | 待运行 | Height baseline | 2048 env，1000 iterations，seed 23 | 待运行 | 未开始 |
 
 ## 5. Baseline 指标
@@ -55,13 +59,14 @@
 
 - 本地工作区根目录的 `.git` 已确认是空目录，不是有效仓库。需先确认远端仓库结构，再在真正的代码目录建立独立 checkout，避免把课程 PPT、视频和其他 Lab 混入仓库。
 - `gh auth` 在受限执行环境中无法联网验证，推送前需在允许网络访问的环境再次确认。
-- Height baseline 未经物理 smoke 和训练验证，当前只能确认公式层实现状态。
-- 首次物理 smoke 暴露出服务器 editable `mujoco_warp` 的 `source.*` 导入路径问题。修复只在本项目运行时增加只读搜索路径，不修改 Lab 4 依赖目录或用户配置。
+- Height baseline 已通过物理 smoke，但尚未完成 PPO/AMP 短训练和正式训练。
+- 首次物理 smoke 暴露出服务器 editable `mujoco_warp` 的 `source.*` 导入路径问题。项目现已通过 `direct_url.json` 自动定位并解码 `%20` 路径；修复只增加运行时只读搜索路径，不修改 Lab 4 依赖目录或用户配置。复测已通过。
 - 参考 Lab 7 checkpoint 的 Actor 输入结构与大作业可能不兼容，迁移前必须检查 state dict 和观测维度。
+- 完整 70 m primitive-geometry 场景在当前 MuJoCo-Warp 构建下，128 及以上并行 worlds 会在首次 reset 前触发 CUDA illegal memory access；64 worlds 已完成 smoke 和短训练。默认值已据此改为 64，多 GPU 用于独立实验而不是单进程扩容。
 
 ## 7. 下一步
 
-1. 检查服务器 Conda、mjlab、GPU 和现有课程目录。
-2. 确认 GitHub 远端结构并建立干净 checkout。
-3. 同步 baseline 代码，完成 Height smoke。
-4. 先运行短训练，再启动正式 Height baseline。
+1. 启动 64 env、1000 iterations 的正式 Height baseline。
+2. 对多个 checkpoint 执行统一评估，不默认选择最后一个。
+3. 根据首版学习曲线决定增加 iterations、课程学习或 warm start。
+4. 生成视频和提交包，并运行 grading toolkit。
