@@ -88,7 +88,7 @@ outputs/submission/student.py
 
 ## 7. 下一步
 
-- 运行 grading toolkit，进一步锁定当前可交付 baseline。
-- 设计分阶段 heading curriculum：窄角度稳定后逐步扩大，并在每阶段使用独立验证早停。
-- 完成 Depth smoke、策略结构和迁移训练，优先取得 Depth 功能分。
-- 生成 TensorBoard 曲线、消融表和路线可视化，用于最终展示与报告。
+- 暂停 Depth，先重训 Height 基础步态并通过 6 m 粗糙地形硬门槛。
+- L0 使用 512 env、4 seeds 平地预训练；seed 4101/4103 的后期 checkpoint 已达到 20 s 无早停、速度误差约 0.016-0.020 m/s，平地 walking success 为 37.5%。
+- 平地模型直接迁移完整粗糙地形仍约 1 s 跌倒，因此进入 L1 温和粗糙课程，不允许跳级。
+- Height 导航只有在首 waypoint 到达、route success 非零且真实单 episode 视频验证后才视为达标。

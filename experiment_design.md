@@ -48,11 +48,13 @@ r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
 - 每组先做 3 起点筛选，再对候选做 10 起点、5000 步正式评估。
 - 主要指标为 route progress；同时报告存活步数、跌倒率和平滑度。
 
-### 阶段 C：Depth 与高分扩展
+### 阶段 C：Depth 与高分扩展（暂停）
 
 - 保持 Height actor 的本体感知和导航结构，引入 60x80 depth encoder。
 - 优先采用 Height teacher 到 Depth student 的蒸馏/微调，降低从零训练成本。
 - 对 Height/Depth 做相同随机起点评估，报告复杂地形上的增益与计算开销。
+
+Depth 只有在 Height 同时通过以下硬门槛后才启动：粗糙地形基础步态能够连续前进至少 6 m；大作业 10 起点评估中能够稳定到达首个 waypoint；route success 非零且单 episode 视频能连续展示复杂地形行走。
 
 ### 阶段 D：最终交付
 
@@ -67,7 +69,7 @@ r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
 
 ## 6. 下一阶段优先级
 
-1. 对当前最佳 Height 模型生成视频并运行 grading toolkit。
-2. 以 waypoint-only 受限微调和策略插值为主线，避免全 actor 微调导致步态遗忘。
-3. 完成 Depth smoke 与 Height-to-Depth 初始化，争取 Depth 10 分。
-4. 完成 AMP scale、平滑权重和感知模式消融，为最终报告提供可信证据。
+1. 重训可靠的 Height locomotion，先通过平地固定速度，再通过 6 m 粗糙地形门槛。
+2. 将合格步态迁移到 waypoint 导航，要求首 waypoint 到达和非零 route success。
+3. 完成 AMP scale、平滑权重和导航课程消融，并生成真实单 episode 视频。
+4. 仅在 Height 达标后启动 Depth smoke 和 Height-to-Depth 初始化。
