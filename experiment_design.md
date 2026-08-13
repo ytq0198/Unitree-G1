@@ -33,6 +33,8 @@ r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
 
 总训练信号还包括 waypoint 速度跟踪、alive/upright、关节限位、自碰撞、AMP 风格奖励和动作平滑惩罚。可选 gait-preservation 模块恢复 Lab7 中与二维命令兼容的躯干角速度、角动量、足端净空和落脚冲击约束；它用于消融，不改变正式路线指标。
 
+安全项使用独立 `fell_over` 终止标志，不能把 route success 或 timeout 一并当作失败惩罚。由于环境按 `dt=0.02` 积分，跌倒权重必须通过消融确定，避免过弱时容忍短程摔倒，也避免过强时退化为原地站立。
+
 ## 4. 训练路线
 
 ### 阶段 A：Height baseline
@@ -47,6 +49,9 @@ r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
 - 对比命令速度、速度跟踪权重、探索标准差和 gait-preservation scale。
 - 每组先做 3 起点筛选，再对候选做 10 起点、5000 步正式评估。
 - 主要指标为 route progress；同时报告存活步数、跌倒率和平滑度。
+- 在 Course Project 自身三类地形上使用难度课程：逐步增加 pile 高度、platform gap 宽度和 pyramid stairs 高度；正式评测固定为完整难度 1.0。
+- 使用训练专用的首段随机起点偏移，在同一批环境中混合中心起点和 tile 边界样本；偏移始终小于半个 tile，正式评测保持原始中心起点。
+- `platform_gap` 使用四向可进入的中心平台环形沟槽，`pyramid_stairs` 使用四向同心台阶；地形几何必须与 route graph 的入口方向一致。专项课程从窄沟/低台阶逐步增加到正式的 0.25 m 沟宽和 0.08 m 阶高。
 
 ### 阶段 C：Depth 与高分扩展（暂停）
 
@@ -83,3 +88,5 @@ Depth 只有在 Height 同时通过以下硬门槛后才启动：粗糙地形基
 3. 路径推进使用折线段投影，waypoint 切换前后连续；到达和成功标志只奖励一次。
 4. AMP policy transition 使用真实 terminal AMP state，50 Hz 专家相邻帧与环境 0.02 s 控制周期一致。
 5. 固定前向穿越评测必须令初始 yaw 与世界 +X 对齐；通用步态训练中的推进奖励则沿命令方向计算，不能混用世界轴与机体系目标。
+6. Course Project 评测同时报告路线百分比、沿路米数、最近航点距离、首航点到达率和完整成功率，避免不同路线总长度掩盖真实运动能力。
+7. 从合格步态或导航 checkpoint 继续训练时，对 actor/critic 观测归一化做冻结消融；归一化统计更新不受 PPO 学习率限制，可能在地形分布变化时破坏已有策略。

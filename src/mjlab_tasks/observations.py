@@ -162,6 +162,11 @@ def route_complete(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
   return command.success
 
 
+def fell_over_penalty(env: ManagerBasedRlEnv) -> torch.Tensor:
+  """Return only physical falls, excluding route success and time limits."""
+  return env.termination_manager.get_term("fell_over").float()
+
+
 def route_progress_metric(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
   command = env.command_manager.get_term(command_name)
   if not isinstance(command, WaypointCommand):

@@ -37,6 +37,7 @@ def _pile_geometries(
   origin: tuple[float, float],
   tile_size: float,
   rng: np.random.Generator,
+  challenge_scale: float,
 ) -> list[TerrainGeometry]:
   ox, oy = origin
   result = [
@@ -57,7 +58,9 @@ def _pile_geometries(
       or abs(y - tile_size / 2) < clear_half_width
     ):
       continue
-    height = float(rng.uniform(0.15, 0.45))
+    height = float(
+      rng.uniform(0.05 + 0.10 * challenge_scale, 0.12 + 0.33 * challenge_scale)
+    )
     result.append(
       _box(
         body,
@@ -73,29 +76,60 @@ def _platform_gap_geometries(
   body: mujoco.MjsBody,
   origin: tuple[float, float],
   tile_size: float,
+  challenge_scale: float,
 ) -> list[TerrainGeometry]:
   ox, oy = origin
+  center_x = ox + tile_size / 2
+  center_y = oy + tile_size / 2
+  platform_half = min(1.0, tile_size / 4)
+  gap_width = 0.08 + 0.17 * challenge_scale
+  gap_half = platform_half + gap_width
+  ground_half = tile_size / 2
+  ground_color = (0.42, 0.46, 0.52, 1.0)
   result = [
     _box(
       body,
-      (ox + tile_size / 2, oy + tile_size / 2, -0.85),
-      (tile_size / 2, tile_size / 2, 0.05),
+      (center_x, center_y, -0.85),
+      (ground_half, ground_half, 0.05),
       (0.12, 0.14, 0.18, 1.0),
-    )
+    ),
+    _box(
+      body,
+      (center_x, center_y, -0.04),
+      (platform_half, platform_half, 0.04),
+      ground_color,
+    ),
   ]
-  gap = 0.45
-  platform_count = 7
-  platform_length = (tile_size - (platform_count - 1) * gap) / platform_count
-  for index in range(platform_count):
-    start = index * (platform_length + gap)
-    result.append(
+  side_half = (ground_half - gap_half) / 2
+  side_offset = (ground_half + gap_half) / 2
+  result.extend(
+    (
       _box(
         body,
-        (ox + start + platform_length / 2, oy + tile_size / 2, -0.04),
-        (platform_length / 2, tile_size / 2, 0.04),
-        (0.42, 0.46, 0.52, 1.0),
-      )
+        (center_x - side_offset, center_y, -0.04),
+        (side_half, ground_half, 0.04),
+        ground_color,
+      ),
+      _box(
+        body,
+        (center_x + side_offset, center_y, -0.04),
+        (side_half, ground_half, 0.04),
+        ground_color,
+      ),
+      _box(
+        body,
+        (center_x, center_y - side_offset, -0.04),
+        (gap_half, side_half, 0.04),
+        ground_color,
+      ),
+      _box(
+        body,
+        (center_x, center_y + side_offset, -0.04),
+        (gap_half, side_half, 0.04),
+        ground_color,
+      ),
     )
+  )
   return result
 
 
@@ -103,37 +137,62 @@ def _stairs_geometries(
   body: mujoco.MjsBody,
   origin: tuple[float, float],
   tile_size: float,
+  challenge_scale: float,
 ) -> list[TerrainGeometry]:
   ox, oy = origin
-  heights = (
-    0.0,
-    0.08,
-    0.16,
-    0.24,
-    0.32,
-    0.40,
-    0.32,
-    0.24,
-    0.16,
-    0.08,
-    0.0,
-  )
-  width = tile_size / len(heights)
+  center_x = ox + tile_size / 2
+  center_y = oy + tile_size / 2
+  level_count = 5
+  platform_half = min(1.0, tile_size / 4)
+  step_width = (tile_size / 2 - platform_half) / level_count
+  step_height = 0.08 * challenge_scale
   result = []
-  for index, height in enumerate(heights):
-    solid_height = max(0.05, height + 0.05)
-    result.append(
-      _box(
-        body,
-        (
-          ox + (index + 0.5) * width,
-          oy + tile_size / 2,
-          height - solid_height / 2,
+  for level in range(level_count):
+    outer_half = tile_size / 2 - level * step_width
+    inner_half = tile_size / 2 - (level + 1) * step_width
+    height = level * step_height
+    solid_height = height + 0.05
+    ring_half_width = (outer_half - inner_half) / 2
+    ring_offset = (outer_half + inner_half) / 2
+    color = (0.48, 0.39 + 0.04 * level, 0.30, 1.0)
+    result.extend(
+      (
+        _box(
+          body,
+          (center_x - ring_offset, center_y, height - solid_height / 2),
+          (ring_half_width, outer_half, solid_height / 2),
+          color,
         ),
-        (width / 2, tile_size / 2, solid_height / 2),
-        (0.48, 0.39 + 0.04 * index, 0.30, 1.0),
+        _box(
+          body,
+          (center_x + ring_offset, center_y, height - solid_height / 2),
+          (ring_half_width, outer_half, solid_height / 2),
+          color,
+        ),
+        _box(
+          body,
+          (center_x, center_y - ring_offset, height - solid_height / 2),
+          (inner_half, ring_half_width, solid_height / 2),
+          color,
+        ),
+        _box(
+          body,
+          (center_x, center_y + ring_offset, height - solid_height / 2),
+          (inner_half, ring_half_width, solid_height / 2),
+          color,
+        ),
       )
     )
+  center_height = level_count * step_height
+  center_solid_height = center_height + 0.05
+  result.append(
+    _box(
+      body,
+      (center_x, center_y, center_height - center_solid_height / 2),
+      (platform_half, platform_half, center_solid_height / 2),
+      (0.48, 0.39 + 0.04 * level_count, 0.30, 1.0),
+    )
+  )
   return result
 
 
@@ -142,6 +201,7 @@ class NavigationSceneSubTerrainCfg(SubTerrainCfg):
   """Adapt one generated scene to mjlab's public SubTerrainCfg API."""
 
   scene: NavigationScene
+  challenge_scale: float = 1.0
 
   def function(
     self,
@@ -153,12 +213,14 @@ class NavigationSceneSubTerrainCfg(SubTerrainCfg):
     body = spec.body("terrain")
     geometries: list[TerrainGeometry] = []
     generators = {
-      "pile": lambda origin: _pile_geometries(body, origin, self.scene.tile_size, rng),
+      "pile": lambda origin: _pile_geometries(
+        body, origin, self.scene.tile_size, rng, self.challenge_scale
+      ),
       "platform_gap": lambda origin: _platform_gap_geometries(
-        body, origin, self.scene.tile_size
+        body, origin, self.scene.tile_size, self.challenge_scale
       ),
       "pyramid_stairs": lambda origin: _stairs_geometries(
-        body, origin, self.scene.tile_size
+        body, origin, self.scene.tile_size, self.challenge_scale
       ),
     }
     for tile in self.scene.tiles:
@@ -172,8 +234,12 @@ class NavigationSceneSubTerrainCfg(SubTerrainCfg):
     )
 
 
-def make_navigation_terrain_generator(scene: NavigationScene) -> TerrainGeneratorCfg:
+def make_navigation_terrain_generator(
+  scene: NavigationScene, challenge_scale: float = 1.0
+) -> TerrainGeneratorCfg:
   """Return a one-patch generator containing the complete shared route scene."""
+  if not 0.0 <= challenge_scale <= 1.0:
+    raise ValueError("challenge_scale must be in [0, 1]")
   size = (scene.rows * scene.tile_size, scene.cols * scene.tile_size)
   return TerrainGeneratorCfg(
     seed=scene.seed,
@@ -184,6 +250,8 @@ def make_navigation_terrain_generator(scene: NavigationScene) -> TerrainGenerato
     num_cols=1,
     color_scheme="none",
     sub_terrains={
-      "navigation_scene": NavigationSceneSubTerrainCfg(scene=scene, size=size)
+      "navigation_scene": NavigationSceneSubTerrainCfg(
+        scene=scene, size=size, challenge_scale=challenge_scale
+      )
     },
   )

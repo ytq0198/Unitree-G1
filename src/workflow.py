@@ -218,6 +218,11 @@ def train(
   warmstart_std: float | None = None,
   training_pushes: bool = False,
   waypoint_only_finetune: bool = False,
+  terrain_difficulty: float = 1.0,
+  fall_penalty_weight: float = 0.0,
+  freeze_normalization: bool = False,
+  start_offset_m: float = 0.0,
+  start_offset_max_m: float | None = None,
 ) -> Path:
   """Train direct 29-joint navigation AMP-PPO and return its run directory."""
   if device.startswith("cuda") and not torch.cuda.is_available():
@@ -236,6 +241,10 @@ def train(
     align_start_heading=align_start_heading,
     start_heading_spread=start_heading_spread,
     training_pushes=training_pushes,
+    terrain_difficulty=terrain_difficulty,
+    fall_penalty_weight=fall_penalty_weight,
+    start_offset_m=start_offset_m,
+    start_offset_max_m=start_offset_max_m,
   )
   env_cfg.scene.num_envs = num_envs
   agent_cfg = course_g1_navigation_ppo_runner_cfg(
@@ -263,6 +272,11 @@ def train(
   )
   if init_checkpoint is not None:
     runner.load(str(Path(init_checkpoint).resolve()), load_cfg=LOAD_CFG)
+    if freeze_normalization:
+      for model in (runner.alg.actor, runner.alg.critic):
+        normalizer = getattr(model, "obs_normalizer", None)
+        if hasattr(normalizer, "until"):
+          normalizer.until = 0
     if warmstart_std is not None:
       if warmstart_std <= 0.0:
         raise ValueError("warmstart_std must be positive")
@@ -282,6 +296,8 @@ def train(
         actor.obs_normalizer.until = 0
   elif waypoint_only_finetune:
     raise ValueError("waypoint-only fine-tuning requires --init-checkpoint")
+  elif freeze_normalization:
+    raise ValueError("freezing normalization requires --init-checkpoint")
   try:
     runner.learn(num_learning_iterations=iterations)
   finally:
@@ -303,6 +319,7 @@ def _inference_runner(
   start_heading_spread: float = 0.25,
   hidden_dims: tuple[int, ...] = (256, 128),
   max_command_speed: float = 0.6,
+  terrain_difficulty: float = 1.0,
 ) -> tuple[ManagerBasedRlEnv, ManualResetAmpVecEnvWrapper, MjlabOnPolicyRunner]:
   student_path = _student_path(student_file)
   env_cfg = course_g1_navigation_env_cfg(
@@ -314,6 +331,7 @@ def _inference_runner(
     align_start_heading=align_start_heading,
     start_heading_spread=start_heading_spread,
     max_command_speed=max_command_speed,
+    terrain_difficulty=terrain_difficulty,
   )
   env_cfg.scene.num_envs = num_envs
   agent_cfg = course_g1_navigation_ppo_runner_cfg(
@@ -341,6 +359,7 @@ def evaluate(
   start_heading_spread: float = 0.25,
   hidden_dims: tuple[int, ...] = (256, 128),
   max_command_speed: float = 0.6,
+  terrain_difficulty: float = 1.0,
 ) -> dict[str, float]:
   """Average ten independent rollouts with distinct random route starts."""
   if num_envs != 1:
@@ -349,6 +368,8 @@ def evaluate(
     raise ValueError("steps must be positive")
   evaluation_seeds = sample_evaluation_seeds(seed, evaluations)
   progress_results = []
+  progress_m_results = []
+  closest_waypoint_results = []
   success_results = []
   waypoint_count_results = []
   first_waypoint_results = []
@@ -369,10 +390,13 @@ def evaluate(
       start_heading_spread=start_heading_spread,
       hidden_dims=hidden_dims,
       max_command_speed=max_command_speed,
+      terrain_difficulty=terrain_difficulty,
     )
     policy = runner.get_inference_policy(device)
     observations = wrapped.get_observations().to(device)
     max_progress = torch.zeros(1, device=device)
+    max_path_position = torch.zeros(1, device=device)
+    closest_waypoint = torch.full((1,), float("inf"), device=device)
     succeeded = torch.zeros(1, dtype=torch.bool, device=device)
     max_waypoints_reached = 0
     previous = torch.zeros(1, 29, device=device)
@@ -391,6 +415,15 @@ def evaluate(
           if not isinstance(command, WaypointCommand):
             raise TypeError("Expected WaypointCommand")
           max_progress = torch.maximum(max_progress, command.progress)
+          max_path_position = torch.maximum(
+            max_path_position, command.path_position_m
+          )
+          waypoint_distance = torch.norm(
+            command.current_waypoint_w[:, :2]
+            - env.scene["robot"].data.root_link_pos_w[:, :2],
+            dim=-1,
+          )
+          closest_waypoint = torch.minimum(closest_waypoint, waypoint_distance)
           succeeded |= command.success
           reached_count = int(command.route_index.item()) - 1
           if bool(command.success.item()):
@@ -413,6 +446,8 @@ def evaluate(
     finally:
       wrapped.close()
     progress_results.append(max_progress.item())
+    progress_m_results.append(max_path_position.item())
+    closest_waypoint_results.append(closest_waypoint.item())
     success_results.append(float(succeeded.item()))
     waypoint_count_results.append(float(max_waypoints_reached))
     first_waypoint_results.append(float(max_waypoints_reached >= 1))
@@ -422,6 +457,8 @@ def evaluate(
     time_out_results.append(float(time_out))
   return {
     "route_progress": float(np.mean(progress_results)),
+    "route_progress_m": float(np.mean(progress_m_results)),
+    "closest_waypoint_distance_m": float(np.mean(closest_waypoint_results)),
     "route_success": float(np.mean(success_results)),
     "waypoints_reached": float(np.mean(waypoint_count_results)),
     "first_waypoint_success": float(np.mean(first_waypoint_results)),

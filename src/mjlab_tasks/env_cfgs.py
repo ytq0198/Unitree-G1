@@ -30,6 +30,7 @@ from .observations import (
   normalized_depth,
   route_complete,
   route_progress_metric,
+  fell_over_penalty,
   student_smoothness_penalty,
   waypoint_velocity_tracking,
 )
@@ -56,6 +57,10 @@ def course_g1_navigation_env_cfg(
   align_start_heading: bool = False,
   start_heading_spread: float = 0.25,
   training_pushes: bool = False,
+  terrain_difficulty: float = 1.0,
+  fall_penalty_weight: float = 0.0,
+  start_offset_m: float = 0.0,
+  start_offset_max_m: float | None = None,
 ) -> ManagerBasedRlEnvCfg:
   """Create the physical navigation task without a low-level policy layer."""
   if observation_mode not in ("height", "depth"):
@@ -76,7 +81,9 @@ def course_g1_navigation_env_cfg(
   cfg.scene.extent = 7.0
   cfg.scene.terrain = TerrainEntityCfg(
     terrain_type="generator",
-    terrain_generator=make_navigation_terrain_generator(navigation_scene),
+    terrain_generator=make_navigation_terrain_generator(
+      navigation_scene, challenge_scale=terrain_difficulty
+    ),
     max_init_terrain_level=0,
   )
   cfg.episode_length_s = 100.0
@@ -84,6 +91,28 @@ def course_g1_navigation_env_cfg(
   cfg.auto_reset = False
   cfg.scale_rewards_by_dt = True
   cfg.events["reset_robot_joints"].func = reset_joints_by_offset_batched
+  half_tile = navigation_scene.tile_size / 2
+  if not 0.0 <= start_offset_m < half_tile:
+    raise ValueError("start_offset_m must stay within the first half-tile")
+  if start_offset_max_m is not None:
+    if start_offset_m != 0.0:
+      raise ValueError("fixed and random start offsets cannot be combined")
+    if not 0.0 < start_offset_max_m < half_tile:
+      raise ValueError("start_offset_max_m must stay within the first half-tile")
+  if start_offset_m or start_offset_max_m is not None:
+    route_dx = navigation_scene.route[1][0] - navigation_scene.route[0][0]
+    route_dy = navigation_scene.route[1][1] - navigation_scene.route[0][1]
+    route_norm = math.hypot(route_dx, route_dy)
+    pose_range = cfg.events["reset_base"].params["pose_range"]
+    for axis, direction in (("x", route_dx), ("y", route_dy)):
+      low, high = pose_range[axis]
+      unit_direction = direction / route_norm
+      if start_offset_max_m is None:
+        shift = start_offset_m * unit_direction
+        pose_range[axis] = (low + shift, high + shift)
+      else:
+        shifts = sorted((0.0, start_offset_max_m * unit_direction))
+        pose_range[axis] = (low + shifts[0], high + shifts[1])
   if align_start_heading:
     route_dx = navigation_scene.route[1][0] - navigation_scene.route[0][0]
     route_dy = navigation_scene.route[1][1] - navigation_scene.route[0][1]
@@ -205,6 +234,12 @@ def course_g1_navigation_env_cfg(
           term.params["command_name"] = None
         term.weight *= gait_preservation_scale
         cfg.rewards[name] = term
+  if fall_penalty_weight > 0.0:
+    raise ValueError("fall_penalty_weight must be non-positive")
+  cfg.rewards["fell_over_penalty"] = RewardTermCfg(
+    func=fell_over_penalty,
+    weight=fall_penalty_weight,
+  )
 
   native_terminations = cfg.terminations
   cfg.terminations = {

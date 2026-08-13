@@ -41,6 +41,11 @@ def main() -> None:
   parser.add_argument("--entropy-coef", type=float, default=0.01)
   parser.add_argument("--warmstart-std", type=float)
   parser.add_argument("--training-pushes", action="store_true")
+  parser.add_argument("--terrain-difficulty", type=float, default=1.0)
+  parser.add_argument("--fall-penalty-weight", type=float, default=0.0)
+  parser.add_argument("--freeze-normalization", action="store_true")
+  parser.add_argument("--start-offset-m", type=float, default=0.0)
+  parser.add_argument("--start-offset-max-m", type=float)
   parser.add_argument("--waypoint-only-finetune", action="store_true")
   args = parser.parse_args()
   hidden_dims = tuple(int(value) for value in args.hidden_dims.split(","))
@@ -91,6 +96,11 @@ def main() -> None:
       warmstart_std=args.warmstart_std,
       training_pushes=args.training_pushes,
       waypoint_only_finetune=args.waypoint_only_finetune,
+      terrain_difficulty=args.terrain_difficulty,
+      fall_penalty_weight=args.fall_penalty_weight,
+      freeze_normalization=args.freeze_normalization,
+      start_offset_m=args.start_offset_m,
+      start_offset_max_m=args.start_offset_max_m,
     )
     print(run_dir)
     return
@@ -114,6 +124,7 @@ def main() -> None:
       start_heading_spread=args.start_heading_spread,
       hidden_dims=hidden_dims,
       max_command_speed=args.max_command_speed,
+      terrain_difficulty=args.terrain_difficulty,
     )
     path = outputs / f"eval_{args.mode}.json"
     path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
