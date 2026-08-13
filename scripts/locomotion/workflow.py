@@ -34,6 +34,43 @@ LOAD_CFG = {
   "rnd": False,
 }
 
+
+def _commanded_upright_progress_reward(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  upright_gravity_z: float = -0.75,
+) -> torch.Tensor:
+  """Reward velocity along the commanded body-frame direction while upright."""
+  robot = env.scene["robot"]
+  command = env.command_manager.get_command(command_name)
+  if not isinstance(command, torch.Tensor):
+    raise TypeError(f"Command {command_name!r} must be a tensor")
+  planar_command = command[:, :2]
+  command_norm = torch.norm(planar_command, dim=-1)
+  direction = planar_command / command_norm.unsqueeze(-1).clamp_min(1.0e-6)
+  directed_speed = torch.sum(
+    robot.data.root_link_lin_vel_b[:, :2] * direction, dim=-1
+  )
+  upright = robot.data.projected_gravity_b[:, 2] < upright_gravity_z
+  active = command_norm > 0.1
+  return torch.clamp(directed_speed, -0.5, 1.0) * upright * active
+
+
+def _repair_locomotion_objective(env_cfg: Any) -> None:
+  """Remove world-axis assumptions from the reusable locomotion objective."""
+  for reward_name in ("world_forward_progress", "upright_walk_progress"):
+    term = env_cfg.rewards.get(reward_name)
+    if term is not None:
+      term.func = _commanded_upright_progress_reward
+      term.params = {"command_name": "twist"}
+
+
+def _align_traversal_reset(env_cfg: Any) -> None:
+  """Make the held-out world +X traversal metric match the reset heading."""
+  reset_base = env_cfg.events.get("reset_base")
+  if reset_base is not None:
+    reset_base.params["pose_range"]["yaw"] = (0.0, 0.0)
+
 MODEL_HEIGHT = """from __future__ import annotations
 
 from collections.abc import Mapping
@@ -175,6 +212,7 @@ def train(
   env_cfg = course_g1_rough_walk_env_cfg(
     mode, student_path=student_path, training_phase=training_phase
   )
+  _repair_locomotion_objective(env_cfg)
   env_cfg.scene.num_envs = num_envs
   env_cfg.seed = seed
   agent_cfg = course_g1_amp_ppo_runner_cfg(
@@ -244,6 +282,8 @@ def _inference_runner(
     environment_phase = "walk"
   else:
     raise ValueError(f"Unknown evaluation terrain: {evaluation_terrain}")
+  _repair_locomotion_objective(env_cfg)
+  _align_traversal_reset(env_cfg)
   env_cfg.scene.num_envs = num_envs
   agent_cfg = course_g1_amp_ppo_runner_cfg(
     mode, student_path, training_phase=model_phase or environment_phase
@@ -415,6 +455,8 @@ def record_video(
 
   student_path = _student_path(student_file)
   env_cfg = course_g1_rough_traversal_env_cfg(mode, student_path=student_path)
+  _repair_locomotion_objective(env_cfg)
+  _align_traversal_reset(env_cfg)
   env_cfg.scene.num_envs = 1
   if seed is not None:
     env_cfg.seed = seed

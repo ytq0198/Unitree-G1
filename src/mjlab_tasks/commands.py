@@ -9,6 +9,7 @@ import torch
 from mjlab.entity import Entity
 from mjlab.managers.command_manager import CommandTerm, CommandTermCfg
 
+from src.navigation_math import route_position_m
 from src.student_api import load_student_function
 
 
@@ -31,6 +32,7 @@ class WaypointCommand(CommandTerm):
     self.total_length = float(self.cumulative_length[-1])
     self.route_index = torch.ones(self.num_envs, dtype=torch.long, device=self.device)
     self.progress = torch.zeros(self.num_envs, device=self.device)
+    self.path_position_m = torch.zeros(self.num_envs, device=self.device)
     self.success = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
     self.waypoint_reached = torch.zeros_like(self.success)
     self._body_frame = load_student_function(cfg.student_path, "waypoint_in_body_frame")
@@ -77,6 +79,7 @@ class WaypointCommand(CommandTerm):
   def _resample_command(self, env_ids: torch.Tensor) -> None:
     self.route_index[env_ids] = 1
     self.progress[env_ids] = 0.0
+    self.path_position_m[env_ids] = 0.0
     self.success[env_ids] = False
     self.waypoint_reached[env_ids] = False
 
@@ -92,13 +95,16 @@ class WaypointCommand(CommandTerm):
     advance = reached & (self.route_index < final_index)
     self.route_index[advance] += 1
 
-    target_xy = self.current_waypoint_w[:, :2]
-    distance = torch.norm(target_xy - robot_xy, dim=-1)
-    previous_index = torch.clamp(self.route_index - 1, min=0)
-    segment_start = self.cumulative_length[previous_index]
-    segment_end = self.cumulative_length[self.route_index]
-    segment_progress = torch.clamp(segment_end - distance, min=segment_start)
-    current_progress = torch.clamp(segment_progress / self.total_length, 0.0, 1.0)
+    self.path_position_m = route_position_m(
+      robot_xy,
+      self._env.scene.env_origins[:, :2],
+      self.route_offsets,
+      self.route_index,
+      self.cumulative_length,
+    )
+    current_progress = torch.clamp(
+      self.path_position_m / self.total_length, 0.0, 1.0
+    )
     current_progress[self.success] = 1.0
     self.progress = torch.maximum(self.progress, current_progress)
 

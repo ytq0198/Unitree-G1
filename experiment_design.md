@@ -29,7 +29,7 @@ Lab7 学习的是速度指令跟踪下的粗糙地形步态；大作业新增长
 r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
 ```
 
-`RewardManager` 会乘以 `dt=0.02`，因此环境向 `student.navigation_reward()` 传入距离改善率 `(d[t-1]-d[t])/dt`，积分后仍得到真实距离改善。
+`RewardManager` 会乘以 `dt=0.02`，因此环境向 `student.navigation_reward()` 传入沿当前折线路段投影得到的有符号路径推进率 `(s[t]-s[t-1])/dt`，积分后仍得到真实路径推进距离。该定义在 waypoint 切换处连续，也不会把偏离路线但靠近航点的径向运动误计为沿路线推进。
 
 总训练信号还包括 waypoint 速度跟踪、alive/upright、关节限位、自碰撞、AMP 风格奖励和动作平滑惩罚。可选 gait-preservation 模块恢复 Lab7 中与二维命令兼容的躯干角速度、角动量、足端净空和落脚冲击约束；它用于消融，不改变正式路线指标。
 
@@ -73,3 +73,13 @@ Depth 只有在 Height 同时通过以下硬门槛后才启动：粗糙地形基
 2. 将合格步态迁移到 waypoint 导航，要求首 waypoint 到达和非零 route success。
 3. 完成 AMP scale、平滑权重和导航课程消融，并生成真实单 episode 视频。
 4. 仅在 Height 达标后启动 Depth smoke 和 Height-to-Depth 初始化。
+
+## 7. 算法正确性门槛
+
+正式训练前必须同时通过以下检查：
+
+1. actor/critic 观测布局与 warm-start 删除列一致：Lab7 为 286/298 维，大作业为 285/297 维，且只删除命令中的 yaw-rate。
+2. waypoint 命令与速度跟踪均使用 yaw-local 坐标系；地形坡度导致的 roll/pitch 不得改变二维导航命令语义。
+3. 路径推进使用折线段投影，waypoint 切换前后连续；到达和成功标志只奖励一次。
+4. AMP policy transition 使用真实 terminal AMP state，50 Hz 专家相邻帧与环境 0.02 s 控制周期一致。
+5. 固定前向穿越评测必须令初始 yaw 与世界 +X 对齐；通用步态训练中的推进奖励则沿命令方向计算，不能混用世界轴与机体系目标。

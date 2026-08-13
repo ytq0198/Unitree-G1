@@ -11,6 +11,7 @@ from mjlab.sensor import CameraSensor
 from mjlab.utils.lab_api.math import quat_apply_inverse, yaw_quat
 
 from src.amp.state import KEY_BODY_NAMES, build_state_with
+from src.navigation_math import route_position_m
 from src.student_api import load_student_function
 
 from .commands import WaypointCommand
@@ -61,7 +62,7 @@ def normalized_depth(
 
 
 class NavigationTaskReward(ManagerTermBase):
-  """Track distance reduction without leaking route state to observations."""
+  """Track signed progress along the route without leaking route state."""
 
   def __init__(self, cfg, env: ManagerBasedRlEnv) -> None:
     super().__init__(env)
@@ -72,7 +73,7 @@ class NavigationTaskReward(ManagerTermBase):
     self.reward_fn = load_student_function(
       cfg.params["student_path"], "navigation_reward"
     )
-    self.previous_distance = torch.full(
+    self.previous_path_position = torch.full(
       (env.num_envs,), float("nan"), device=env.device
     )
 
@@ -81,30 +82,33 @@ class NavigationTaskReward(ManagerTermBase):
     if not isinstance(command, WaypointCommand):
       raise TypeError("navigation reward requires WaypointCommand")
     robot: Entity = env.scene["robot"]
-    distance = torch.norm(
-      command.current_waypoint_w[:, :2] - robot.data.root_link_pos_w[:, :2],
-      dim=-1,
+    path_position = route_position_m(
+      robot.data.root_link_pos_w[:, :2],
+      env.scene.env_origins[:, :2],
+      command.route_offsets,
+      command.route_index,
+      command.cumulative_length,
     )
-    fresh = torch.isnan(self.previous_distance)
+    fresh = torch.isnan(self.previous_path_position)
     # RewardManager integrates rewards with dt. Express dense progress as a
     # rate so the integrated term remains the actual distance improvement.
-    progress = (self.previous_distance - distance) / self.step_dt
+    progress = (path_position - self.previous_path_position) / self.step_dt
     progress[fresh] = 0.0
-    self.previous_distance = distance.detach()
+    self.previous_path_position = path_position.detach()
     reward = self.reward_fn(
       progress,
       command.waypoint_reached,
       command.success,
     )
-    if reward.shape != distance.shape or not torch.isfinite(reward).all():
+    if reward.shape != path_position.shape or not torch.isfinite(reward).all():
       raise ValueError("navigation_reward() must return a finite [B] tensor")
     return reward
 
   def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
     if env_ids is None:
-      self.previous_distance[:] = float("nan")
+      self.previous_path_position[:] = float("nan")
     else:
-      self.previous_distance[env_ids] = float("nan")
+      self.previous_path_position[env_ids] = float("nan")
 
 
 def student_smoothness_penalty(
@@ -136,15 +140,18 @@ def waypoint_velocity_tracking(
   if not isinstance(command, WaypointCommand):
     raise TypeError("waypoint velocity tracking requires WaypointCommand")
   target = command.command
+  linear_velocity_yaw = quat_apply_inverse(
+    yaw_quat(robot.data.root_link_quat_w), robot.data.root_link_lin_vel_w
+  )
   if command_mode == "forward_yaw":
-    error = torch.square(target[:, 0] - robot.data.root_link_lin_vel_b[:, 0])
-    error += torch.square(robot.data.root_link_lin_vel_b[:, 1])
+    error = torch.square(target[:, 0] - linear_velocity_yaw[:, 0])
+    error += torch.square(linear_velocity_yaw[:, 1])
     error += torch.square(target[:, 1] - robot.data.root_link_ang_vel_b[:, 2])
   else:
     error = torch.sum(
-      torch.square(target - robot.data.root_link_lin_vel_b[:, :2]), dim=-1
+      torch.square(target - linear_velocity_yaw[:, :2]), dim=-1
     )
-  error += torch.square(robot.data.root_link_lin_vel_b[:, 2])
+  error += torch.square(linear_velocity_yaw[:, 2])
   return torch.exp(-error / std**2)
 
 

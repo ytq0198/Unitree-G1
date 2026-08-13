@@ -21,7 +21,44 @@ def load_paths_module():
   return module
 
 
+def load_navigation_math_module():
+  path = Path(__file__).resolve().parents[1] / "src" / "navigation_math.py"
+  spec = importlib.util.spec_from_file_location("course_navigation_math", path)
+  if spec is None or spec.loader is None:
+    raise ImportError(path)
+  module = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(module)
+  return module
+
+
+route_position_m = load_navigation_math_module().route_position_m
+
+
 class StudentFormulaTests(unittest.TestCase):
+  def test_route_position_projects_onto_active_segment(self) -> None:
+    route = torch.tensor([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]])
+    cumulative = torch.tensor([0.0, 10.0, 20.0])
+    position = route_position_m(
+      torch.tensor([[4.0, 3.0], [12.0, 4.0]]),
+      torch.zeros(2, 2),
+      route,
+      torch.tensor([1, 2]),
+      cumulative,
+    )
+    torch.testing.assert_close(position, torch.tensor([4.0, 14.0]))
+
+  def test_route_position_is_continuous_across_a_turn(self) -> None:
+    route = torch.tensor([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]])
+    cumulative = torch.tensor([0.0, 10.0, 20.0])
+    robot = torch.tensor([[10.0, 0.0]])
+    before = route_position_m(
+      robot, torch.zeros(1, 2), route, torch.tensor([1]), cumulative
+    )
+    after = route_position_m(
+      robot, torch.zeros(1, 2), route, torch.tensor([2]), cumulative
+    )
+    torch.testing.assert_close(before, after)
+
   def test_editable_file_url_decodes_spaces(self) -> None:
     path = load_paths_module()._path_from_file_url(
       "file:///mnt/localDisk3/RL%20learning/mujoco_warp"
