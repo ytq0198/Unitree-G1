@@ -130,6 +130,15 @@ class StudentFormulaTests(unittest.TestCase):
       integrated_progress_reward, 4.0 * distance_improvement
     )
 
+  def test_event_rates_cancel_environment_dt_scaling(self) -> None:
+    step_dt = 0.02
+    reward_rate = student.navigation_reward(
+      torch.zeros(2),
+      torch.tensor([1.0, 0.0]) / step_dt,
+      torch.tensor([0.0, 1.0]) / step_dt,
+    )
+    torch.testing.assert_close(reward_rate * step_dt, torch.tensor([0.5, 5.0]))
+
   def test_smoothness_zero_for_linear_action_sequence(self) -> None:
     previous_previous = torch.zeros(2, 29)
     previous = torch.ones(2, 29)

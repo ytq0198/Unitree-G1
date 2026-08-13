@@ -97,8 +97,8 @@ class NavigationTaskReward(ManagerTermBase):
     self.previous_path_position = path_position.detach()
     reward = self.reward_fn(
       progress,
-      command.waypoint_reached,
-      command.success,
+      command.waypoint_reached.to(dtype=progress.dtype) / self.step_dt,
+      command.success.to(dtype=progress.dtype) / self.step_dt,
     )
     if reward.shape != path_position.shape or not torch.isfinite(reward).all():
       raise ValueError("navigation_reward() must return a finite [B] tensor")
