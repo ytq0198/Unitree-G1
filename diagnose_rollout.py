@@ -18,6 +18,7 @@ def main() -> None:
   parser.add_argument("--steps", type=int, default=500)
   parser.add_argument("--seed", type=int, default=901)
   parser.add_argument("--device", default="cuda:0")
+  parser.add_argument("--hidden-dims", default="512,256,128")
   args = parser.parse_args()
 
   from src import workflow
@@ -31,6 +32,7 @@ def main() -> None:
     seed=args.seed,
     student_file=Path(__file__).resolve().parent / "student.py",
     command_mode=args.command_mode,
+    hidden_dims=tuple(int(value) for value in args.hidden_dims.split(",")),
   )
   policy = runner.get_inference_policy(args.device)
   observations = wrapped.get_observations().to(args.device)

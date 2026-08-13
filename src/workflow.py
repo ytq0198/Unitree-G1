@@ -434,7 +434,7 @@ def record_video(
   command_mode: str = "xy",
   hidden_dims: tuple[int, ...] = (256, 128),
 ) -> Path:
-  """Record a physical navigation MP4 for inline notebook display."""
+  """Record one episode and stop at its first terminal transition."""
   if frames < 150:
     raise ValueError("Evaluation videos must contain at least 150 frames")
   env, wrapped, runner = _inference_runner(
@@ -454,11 +454,17 @@ def record_video(
   try:
     with torch.inference_mode():
       for _ in range(frames):
-        observations, _, _, _ = wrapped.step(policy(observations))
+        action = policy(observations)
+        observation_dict, _, terminated, truncated, _ = env.step(action)
         frame = env.render()
         if frame is None:
           raise RuntimeError("mjlab offscreen renderer returned no frame")
         images.append(np.asarray(frame).copy())
+        if bool((terminated | truncated).item()):
+          break
+        observations = TensorDict(
+          observation_dict, batch_size=[1], device=device
+        )
   finally:
     wrapped.close()
   output_path = Path(output or PROJECT_ROOT / "outputs" / "evaluation.mp4")

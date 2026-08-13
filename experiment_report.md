@@ -2,7 +2,7 @@
 
 ## 1. 当前状态
 
-**Height baseline 已完成训练、正式评估和提交导出；当前重点是路线推进优化与 Depth 扩展。**
+**Height 接口 baseline 已完成训练、评估和提交导出，但当前策略尚不能正常完成复杂地形导航；继续优化 locomotion/navigation 是首要任务。**
 
 - 本地代码：`D:\暑期综合实践活动\暑期综合实践活动II\labs\course project\course_project\course_project`
 - 服务器工作区：`/mnt/localDisk3/weizian/unitree-g1-work`
@@ -52,6 +52,8 @@
 | H14 waypoint-only `model_100.pt` | 0.017398 | 0 | 165.2 | 1.0 | 0.26902 |
 | H15 waypoint blend 75% | **0.019724** | 0 | **1297.7** | **0.8** | **0.19691** |
 
+H15 的逐起点诊断显示，聚合均值不能理解为正常行走：8/10 起点在 63-289 步内跌倒，最大位移仅约 0.6-2.0 m；2/10 起点达到 5000 步 timeout，其中 seed 103 仅移动 0.22 m，属于站立而非导航。当前成功率仍为 0，策略不能视为完成复杂地形穿越。
+
 当前最佳 checkpoint（H15）：
 
 ```text
@@ -71,7 +73,7 @@ outputs/submission/student.py
 
 `policy.pt` 可加载，并对 `[2,285]` 输入产生全为有限数值的 `[2,29]` 输出。该行为与 Lab7 官方导出适配器一致；环境的 joint-position action term 负责后续动作缩放。导出时使用与 checkpoint 一致的 `512-256-128` 网络，已修复旧入口默认按小网络重建的问题。
 
-已生成 H9 最佳模型的 300 帧评估视频 `outputs/evaluation.mp4`：H.264、320x240、50 FPS、6 秒；抽查首帧、中间帧和末帧均非空白画面。
+旧版 300 帧视频使用自动 reset wrapper，摔倒后会在同一视频中开始新 episode，因此不能作为连续穿越证据。现已修复为首次终止即停止录像；后续报告只使用单 episode 视频，并同时报告路线推进和终止原因。
 
 ## 6. 已验证结论
 
