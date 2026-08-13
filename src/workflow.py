@@ -226,6 +226,7 @@ def train(
   freeze_normalization: bool = False,
   start_offset_m: float = 0.0,
   start_offset_max_m: float | None = None,
+  training_scenes: int = 1,
 ) -> Path:
   """Train direct 29-joint navigation AMP-PPO and return its run directory."""
   if device.startswith("cuda") and not torch.cuda.is_available():
@@ -250,6 +251,7 @@ def train(
     fall_penalty_weight=fall_penalty_weight,
     start_offset_m=start_offset_m,
     start_offset_max_m=start_offset_max_m,
+    training_scenes=training_scenes,
   )
   env_cfg.scene.num_envs = num_envs
   agent_cfg = course_g1_navigation_ppo_runner_cfg(
@@ -437,7 +439,9 @@ def evaluate(
           succeeded |= command.success
           reached_count = int(command.route_index.item()) - 1
           if bool(command.success.item()):
-            reached_count = len(command.cfg.route) - 1
+            reached_count = int(
+              command.final_index[command.scene_index].item()
+            )
           max_waypoints_reached = max(max_waypoints_reached, reached_count)
           smoothness.append(
             torch.mean(

@@ -20,6 +20,7 @@ from mjlab.terrains import TerrainEntityCfg
 from src.amp.state import KEY_BODY_NAMES
 from src.terrain import (
   generate_navigation_scene,
+  make_multi_scene_terrain_generator,
   make_navigation_terrain_generator,
 )
 
@@ -63,11 +64,14 @@ def course_g1_navigation_env_cfg(
   fall_penalty_weight: float = 0.0,
   start_offset_m: float = 0.0,
   start_offset_max_m: float | None = None,
+  training_scenes: int = 1,
 ) -> ManagerBasedRlEnvCfg:
   """Create the physical navigation task without a low-level policy layer."""
   if observation_mode not in ("height", "depth"):
     raise ValueError(f"Unknown observation mode: {observation_mode}")
   student_path = str(Path(student_path).resolve())
+  if training_scenes < 1:
+    raise ValueError("training_scenes must be positive")
   navigation_scene = generate_navigation_scene(
     scene_seed,
     grid_shape=(5, 5),
@@ -75,17 +79,45 @@ def course_g1_navigation_env_cfg(
     max_route_length=100.0,
     random_start=random_start,
   )
+  scenes = [navigation_scene]
+  initial_delta = (
+    navigation_scene.route[1][0] - navigation_scene.route[0][0],
+    navigation_scene.route[1][1] - navigation_scene.route[0][1],
+  )
+  candidate_seed = scene_seed + 1
+  while len(scenes) < training_scenes:
+    candidate = generate_navigation_scene(
+      candidate_seed,
+      grid_shape=(5, 5),
+      tile_size=10.0,
+      max_route_length=100.0,
+      random_start=random_start,
+    )
+    candidate_delta = (
+      candidate.route[1][0] - candidate.route[0][0],
+      candidate.route[1][1] - candidate.route[0][1],
+    )
+    if candidate_delta == initial_delta:
+      scenes.append(candidate)
+    candidate_seed += 1
   cfg = unitree_g1_rough_env_cfg(play=play)
   # This full 70 m primitive-geometry scene is stable up to 64 worlds with
   # the course server's MuJoCo-Warp build. Larger batches are run as separate
   # processes/GPUs instead of increasing nworld in one process.
   cfg.scene.num_envs = 32 if play else 64
   cfg.scene.extent = 7.0
+  terrain_generator = (
+    make_navigation_terrain_generator(
+      navigation_scene, challenge_scale=terrain_difficulty
+    )
+    if len(scenes) == 1
+    else make_multi_scene_terrain_generator(
+      tuple(scenes), challenge_scale=terrain_difficulty
+    )
+  )
   cfg.scene.terrain = TerrainEntityCfg(
     terrain_type="generator",
-    terrain_generator=make_navigation_terrain_generator(
-      navigation_scene, challenge_scale=terrain_difficulty
-    ),
+    terrain_generator=terrain_generator,
     max_init_terrain_level=0,
   )
   cfg.episode_length_s = 100.0
@@ -134,7 +166,7 @@ def course_g1_navigation_env_cfg(
   cfg.commands = {
     "waypoint": WaypointCommandCfg(
       entity_name="robot",
-      route=navigation_scene.route,
+      routes=tuple(scene.route for scene in scenes),
       student_path=student_path,
       waypoint_threshold=0.9,
       max_command_speed=max_command_speed,

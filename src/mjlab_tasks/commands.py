@@ -18,18 +18,42 @@ class WaypointCommand(CommandTerm):
 
   def __init__(self, cfg: "WaypointCommandCfg", env) -> None:
     super().__init__(cfg, env)
-    if len(cfg.route) < 2:
-      raise ValueError("Navigation route must contain at least two waypoints")
+    if not cfg.routes or any(len(route) < 2 for route in cfg.routes):
+      raise ValueError("Every navigation route must contain at least two waypoints")
     self.robot: Entity = env.scene[cfg.entity_name]
-    route = torch.tensor(cfg.route, dtype=torch.float32, device=self.device)
-    self.route_offsets = route - route[:1]
-    segment_lengths = torch.norm(
-      self.route_offsets[1:] - self.route_offsets[:-1], dim=-1
+    max_waypoints = max(len(route) for route in cfg.routes)
+    self.route_offsets = torch.zeros(
+      len(cfg.routes), max_waypoints, 2, device=self.device
     )
-    self.cumulative_length = torch.cat(
-      (torch.zeros(1, device=self.device), torch.cumsum(segment_lengths, dim=0))
+    self.cumulative_length = torch.zeros(
+      len(cfg.routes), max_waypoints, device=self.device
     )
-    self.total_length = float(self.cumulative_length[-1])
+    self.final_index = torch.empty(len(cfg.routes), dtype=torch.long, device=self.device)
+    for index, route_points in enumerate(cfg.routes):
+      route = torch.tensor(route_points, dtype=torch.float32, device=self.device)
+      offsets = route - route[:1]
+      count = len(route_points)
+      self.route_offsets[index, :count] = offsets
+      self.route_offsets[index, count:] = offsets[-1]
+      segment_lengths = torch.norm(offsets[1:] - offsets[:-1], dim=-1)
+      cumulative = torch.cat(
+        (torch.zeros(1, device=self.device), torch.cumsum(segment_lengths, dim=0))
+      )
+      self.cumulative_length[index, :count] = cumulative
+      self.cumulative_length[index, count:] = cumulative[-1]
+      self.final_index[index] = count - 1
+    terrain = env.scene.terrain
+    if len(cfg.routes) == 1:
+      self.scene_index = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+    else:
+      if terrain is None or terrain.terrain_types is None:
+        raise ValueError("Multiple routes require procedural terrain columns")
+      self.scene_index = terrain.terrain_types.clone()
+      if int(self.scene_index.max()) >= len(cfg.routes):
+        raise ValueError("Terrain columns and navigation routes are misaligned")
+    self.total_length = self.cumulative_length[
+      self.scene_index, self.final_index[self.scene_index]
+    ]
     self.route_index = torch.ones(self.num_envs, dtype=torch.long, device=self.device)
     self.progress = torch.zeros(self.num_envs, device=self.device)
     self.path_position_m = torch.zeros(self.num_envs, device=self.device)
@@ -41,7 +65,7 @@ class WaypointCommand(CommandTerm):
 
   @property
   def current_waypoint_w(self) -> torch.Tensor:
-    offset = self.route_offsets[self.route_index]
+    offset = self.route_offsets[self.scene_index, self.route_index]
     target = self._env.scene.env_origins.clone()
     target[:, :2] += offset
     return target
@@ -89,7 +113,7 @@ class WaypointCommand(CommandTerm):
     distance = torch.norm(target_xy - robot_xy, dim=-1)
     reached = (distance <= self.cfg.waypoint_threshold) & ~self.success
     self.waypoint_reached = reached
-    final_index = len(self.cfg.route) - 1
+    final_index = self.final_index[self.scene_index]
     at_final = reached & (self.route_index == final_index)
     self.success |= at_final
     advance = reached & (self.route_index < final_index)
@@ -101,6 +125,7 @@ class WaypointCommand(CommandTerm):
       self.route_offsets,
       self.route_index,
       self.cumulative_length,
+      self.scene_index,
     )
     current_progress = torch.clamp(
       self.path_position_m / self.total_length, 0.0, 1.0
@@ -116,7 +141,7 @@ class WaypointCommand(CommandTerm):
 @dataclass(kw_only=True)
 class WaypointCommandCfg(CommandTermCfg):
   entity_name: str
-  route: tuple[tuple[float, float], ...]
+  routes: tuple[tuple[tuple[float, float], ...], ...]
   student_path: str
   waypoint_threshold: float = 0.9
   max_command_speed: float = 0.6

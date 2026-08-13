@@ -10,6 +10,7 @@ from .scene import (
 from .subterrain import (
   COURSE_PROJECT_BORDER_WIDTH,
   NavigationSceneSubTerrainCfg,
+  make_multi_scene_terrain_generator,
   make_navigation_terrain_generator,
 )
 
@@ -20,6 +21,7 @@ __all__ = [
   "Portal",
   "Tile",
   "generate_navigation_scene",
+  "make_multi_scene_terrain_generator",
   "make_navigation_terrain_generator",
   "sample_evaluation_seeds",
 ]

@@ -88,6 +88,7 @@ class NavigationTaskReward(ManagerTermBase):
       command.route_offsets,
       command.route_index,
       command.cumulative_length,
+      command.scene_index,
     )
     fresh = torch.isnan(self.previous_path_position)
     # RewardManager integrates rewards with dt. Express dense progress as a

@@ -52,6 +52,7 @@ def main() -> None:
   parser.add_argument("--start-offset-m", type=float, default=0.0)
   parser.add_argument("--start-offset-max-m", type=float)
   parser.add_argument("--waypoint-only-finetune", action="store_true")
+  parser.add_argument("--training-scenes", type=int, default=1)
   args = parser.parse_args()
   hidden_dims = tuple(int(value) for value in args.hidden_dims.split(","))
 
@@ -109,6 +110,7 @@ def main() -> None:
       freeze_normalization=args.freeze_normalization,
       start_offset_m=args.start_offset_m,
       start_offset_max_m=args.start_offset_max_m,
+      training_scenes=args.training_scenes,
     )
     print(run_dir)
     return

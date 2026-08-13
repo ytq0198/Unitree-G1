@@ -255,3 +255,36 @@ def make_navigation_terrain_generator(
       )
     },
   )
+
+
+def make_multi_scene_terrain_generator(
+  scenes: tuple[NavigationScene, ...], challenge_scale: float = 1.0
+) -> TerrainGeneratorCfg:
+  """Place complete navigation scenes in separate terrain columns."""
+  if not scenes:
+    raise ValueError("At least one navigation scene is required")
+  if not 0.0 <= challenge_scale <= 1.0:
+    raise ValueError("challenge_scale must be in [0, 1]")
+  first = scenes[0]
+  if any(
+    (scene.rows, scene.cols, scene.tile_size)
+    != (first.rows, first.cols, first.tile_size)
+    for scene in scenes
+  ):
+    raise ValueError("All navigation scenes must use the same grid geometry")
+  size = (first.rows * first.tile_size, first.cols * first.tile_size)
+  return TerrainGeneratorCfg(
+    seed=first.seed,
+    curriculum=True,
+    size=size,
+    border_width=COURSE_PROJECT_BORDER_WIDTH,
+    num_rows=1,
+    num_cols=len(scenes),
+    color_scheme="none",
+    sub_terrains={
+      f"navigation_scene_{index}": NavigationSceneSubTerrainCfg(
+        scene=scene, size=size, challenge_scale=challenge_scale
+      )
+      for index, scene in enumerate(scenes)
+    },
+  )
