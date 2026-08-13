@@ -19,6 +19,8 @@ def main() -> None:
   parser.add_argument("--seed", type=int, default=901)
   parser.add_argument("--device", default="cuda:0")
   parser.add_argument("--hidden-dims", default="512,256,128")
+  parser.add_argument("--terrain-difficulty", type=float, default=1.0)
+  parser.add_argument("--start-offset-m", type=float, default=0.0)
   args = parser.parse_args()
 
   from src import workflow
@@ -33,6 +35,8 @@ def main() -> None:
     student_file=Path(__file__).resolve().parent / "student.py",
     command_mode=args.command_mode,
     hidden_dims=tuple(int(value) for value in args.hidden_dims.split(",")),
+    terrain_difficulty=args.terrain_difficulty,
+    start_offset_m=args.start_offset_m,
   )
   policy = runner.get_inference_policy(args.device)
   observations = wrapped.get_observations().to(args.device)
@@ -54,6 +58,13 @@ def main() -> None:
               "command": command.command[0].cpu().tolist(),
               "heading": float(command.robot.data.heading_w[0]),
               "body_velocity": command.robot.data.root_link_lin_vel_b[0, :2]
+              .cpu()
+              .tolist(),
+              "root_height": float(command.robot.data.root_link_pos_w[0, 2]),
+              "projected_gravity": command.robot.data.projected_gravity_b[0]
+              .cpu()
+              .tolist(),
+              "site_heights": command.robot.data.site_pos_w[0, :, 2]
               .cpu()
               .tolist(),
               "displacement": (xy - start_xy).cpu().tolist(),

@@ -28,9 +28,14 @@ def main() -> None:
   parser.add_argument("--smoothness-weight", type=float, default=-0.05)
   parser.add_argument("--velocity-tracking-weight", type=float, default=2.0)
   parser.add_argument("--gait-preservation-scale", type=float, default=0.0)
+  parser.add_argument("--foot-clearance-target", type=float, default=0.1)
+  parser.add_argument("--foot-clearance-scale", type=float, default=1.0)
   parser.add_argument("--max-command-speed", type=float, default=0.6)
   parser.add_argument("--amp-scale", type=float, default=0.5)
   parser.add_argument("--learning-rate", type=float, default=1.0e-3)
+  parser.add_argument(
+    "--learning-rate-schedule", choices=("adaptive", "fixed"), default="adaptive"
+  )
   parser.add_argument(
     "--command-mode", choices=("xy", "forward_yaw"), default="xy"
   )
@@ -84,9 +89,12 @@ def main() -> None:
       smoothness_reward_weight=args.smoothness_weight,
       velocity_tracking_weight=args.velocity_tracking_weight,
       gait_preservation_scale=args.gait_preservation_scale,
+      foot_clearance_target=args.foot_clearance_target,
+      foot_clearance_scale=args.foot_clearance_scale,
       max_command_speed=args.max_command_speed,
       amp_reward_scale=args.amp_scale,
       learning_rate=args.learning_rate,
+      learning_rate_schedule=args.learning_rate_schedule,
       command_mode=args.command_mode,
       run_tag=args.run_tag,
       align_start_heading=args.align_start_heading,
@@ -125,6 +133,7 @@ def main() -> None:
       hidden_dims=hidden_dims,
       max_command_speed=args.max_command_speed,
       terrain_difficulty=args.terrain_difficulty,
+      start_offset_m=args.start_offset_m,
     )
     path = outputs / f"eval_{args.mode}.json"
     path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")

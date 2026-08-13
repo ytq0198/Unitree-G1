@@ -52,6 +52,8 @@ def course_g1_navigation_env_cfg(
   smoothness_reward_weight: float = -0.05,
   velocity_tracking_weight: float = 2.0,
   gait_preservation_scale: float = 0.0,
+  foot_clearance_target: float = 0.1,
+  foot_clearance_scale: float = 1.0,
   max_command_speed: float = 0.6,
   command_mode: Literal["xy", "forward_yaw"] = "xy",
   align_start_heading: bool = False,
@@ -134,7 +136,7 @@ def course_g1_navigation_env_cfg(
       entity_name="robot",
       route=navigation_scene.route,
       student_path=student_path,
-      waypoint_threshold=0.45,
+      waypoint_threshold=0.9,
       max_command_speed=max_command_speed,
       command_mode=command_mode,
       resampling_time_range=(1.0e9, 1.0e9),
@@ -220,6 +222,10 @@ def course_g1_navigation_env_cfg(
     cfg.rewards["self_collisions"] = native_rewards["self_collisions"]
   if gait_preservation_scale < 0.0:
     raise ValueError("gait_preservation_scale must be non-negative")
+  if foot_clearance_target <= 0.0:
+    raise ValueError("foot_clearance_target must be positive")
+  if foot_clearance_scale < 0.0:
+    raise ValueError("foot_clearance_scale must be non-negative")
   if gait_preservation_scale:
     gait_reward_names = (
       "body_ang_vel",
@@ -233,6 +239,9 @@ def course_g1_navigation_env_cfg(
         if "command_name" in term.params:
           term.params["command_name"] = None
         term.weight *= gait_preservation_scale
+        if name == "foot_clearance":
+          term.params["target_height"] = foot_clearance_target
+          term.weight *= foot_clearance_scale
         cfg.rewards[name] = term
   if fall_penalty_weight > 0.0:
     raise ValueError("fall_penalty_weight must be non-positive")

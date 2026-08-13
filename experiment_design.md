@@ -47,6 +47,8 @@ r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
 ### 阶段 B：稳定性与导航优化
 
 - 对比命令速度、速度跟踪权重、探索标准差和 gait-preservation scale。
+- 课程微调固定学习率，禁止 adaptive 调度自动放大低学习率；每个难度仅短训练并按独立评测早停。
+- 沟槽与台阶分别维护专家 checkpoint：沟槽采用适度 AMP，台阶采用更强 AMP 与 Lab7 步态保持；单项达标后再通过混合场景训练或 actor 插值整合。
 - 每组先做 3 起点筛选，再对候选做 10 起点、5000 步正式评估。
 - 主要指标为 route progress；同时报告存活步数、跌倒率和平滑度。
 - 在 Course Project 自身三类地形上使用难度课程：逐步增加 pile 高度、platform gap 宽度和 pyramid stairs 高度；正式评测固定为完整难度 1.0。

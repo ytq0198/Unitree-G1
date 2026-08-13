@@ -82,7 +82,7 @@ def _platform_gap_geometries(
   center_x = ox + tile_size / 2
   center_y = oy + tile_size / 2
   platform_half = min(1.0, tile_size / 4)
-  gap_width = 0.08 + 0.17 * challenge_scale
+  gap_width = 0.25 * challenge_scale
   gap_half = platform_half + gap_width
   ground_half = tile_size / 2
   ground_color = (0.42, 0.46, 0.52, 1.0)

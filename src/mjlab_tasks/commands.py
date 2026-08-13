@@ -118,7 +118,7 @@ class WaypointCommandCfg(CommandTermCfg):
   entity_name: str
   route: tuple[tuple[float, float], ...]
   student_path: str
-  waypoint_threshold: float = 0.45
+  waypoint_threshold: float = 0.9
   max_command_speed: float = 0.6
   max_yaw_rate: float = 0.25
   min_turning_speed: float = 0.1

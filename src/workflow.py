@@ -206,9 +206,12 @@ def train(
   smoothness_reward_weight: float = -0.05,
   velocity_tracking_weight: float = 2.0,
   gait_preservation_scale: float = 0.0,
+  foot_clearance_target: float = 0.1,
+  foot_clearance_scale: float = 1.0,
   max_command_speed: float = 0.6,
   amp_reward_scale: float = 0.5,
   learning_rate: float = 1.0e-3,
+  learning_rate_schedule: str = "adaptive",
   command_mode: str = "xy",
   run_tag: str = "",
   align_start_heading: bool = False,
@@ -236,6 +239,8 @@ def train(
     smoothness_reward_weight=smoothness_reward_weight,
     velocity_tracking_weight=velocity_tracking_weight,
     gait_preservation_scale=gait_preservation_scale,
+    foot_clearance_target=foot_clearance_target,
+    foot_clearance_scale=foot_clearance_scale,
     max_command_speed=max_command_speed,
     command_mode=command_mode,
     align_start_heading=align_start_heading,
@@ -252,6 +257,7 @@ def train(
     student_path=student_path,
     amp_reward_scale=amp_reward_scale,
     learning_rate=learning_rate,
+    learning_rate_schedule=learning_rate_schedule,
     hidden_dims=hidden_dims,
     entropy_coef=entropy_coef,
   )
@@ -320,6 +326,7 @@ def _inference_runner(
   hidden_dims: tuple[int, ...] = (256, 128),
   max_command_speed: float = 0.6,
   terrain_difficulty: float = 1.0,
+  start_offset_m: float = 0.0,
 ) -> tuple[ManagerBasedRlEnv, ManualResetAmpVecEnvWrapper, MjlabOnPolicyRunner]:
   student_path = _student_path(student_file)
   env_cfg = course_g1_navigation_env_cfg(
@@ -332,6 +339,7 @@ def _inference_runner(
     start_heading_spread=start_heading_spread,
     max_command_speed=max_command_speed,
     terrain_difficulty=terrain_difficulty,
+    start_offset_m=start_offset_m,
   )
   env_cfg.scene.num_envs = num_envs
   agent_cfg = course_g1_navigation_ppo_runner_cfg(
@@ -360,6 +368,7 @@ def evaluate(
   hidden_dims: tuple[int, ...] = (256, 128),
   max_command_speed: float = 0.6,
   terrain_difficulty: float = 1.0,
+  start_offset_m: float = 0.0,
 ) -> dict[str, float]:
   """Average ten independent rollouts with distinct random route starts."""
   if num_envs != 1:
@@ -391,6 +400,7 @@ def evaluate(
       hidden_dims=hidden_dims,
       max_command_speed=max_command_speed,
       terrain_difficulty=terrain_difficulty,
+      start_offset_m=start_offset_m,
     )
     policy = runner.get_inference_policy(device)
     observations = wrapped.get_observations().to(device)

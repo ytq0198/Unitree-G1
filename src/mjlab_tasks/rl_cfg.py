@@ -43,9 +43,12 @@ def course_g1_navigation_ppo_runner_cfg(
   motion_path: str | Path = DEFAULT_MOTION_PATH,
   amp_reward_scale: float = 0.5,
   learning_rate: float = 1.0e-3,
+  learning_rate_schedule: str = "adaptive",
   hidden_dims: tuple[int, ...] = (256, 128),
   entropy_coef: float = 0.01,
 ) -> RslRlOnPolicyRunnerCfg:
+  if learning_rate_schedule not in ("adaptive", "fixed"):
+    raise ValueError("learning_rate_schedule must be 'adaptive' or 'fixed'")
   obs_groups: dict[str, tuple[str, ...]]
   if observation_mode == "depth":
     actor = RslRlModelCfg(
@@ -82,7 +85,7 @@ def course_g1_navigation_ppo_runner_cfg(
     num_learning_epochs=2,
     num_mini_batches=2,
     learning_rate=learning_rate,
-    schedule="adaptive",
+    schedule=learning_rate_schedule,
     gamma=0.99,
     lam=0.95,
     desired_kl=0.02,
