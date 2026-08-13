@@ -72,7 +72,7 @@ def adapt_waypoint(actor: torch.Tensor) -> torch.Tensor:
   heading_error = torch.atan2(displacement[..., 1], displacement[..., 0])
   forward = torch.clamp(torch.norm(displacement, dim=-1), max=0.6)
   forward *= torch.clamp(torch.cos(heading_error), min=0.0)
-  forward = torch.maximum(forward, torch.full_like(forward, 0.4))
+  forward = torch.maximum(forward, torch.full_like(forward, 0.1))
   actor[..., 96] = forward
   actor[..., 97] = torch.clamp(0.5 * heading_error, -0.25, 0.25)
   return actor
@@ -350,6 +350,8 @@ def evaluate(
   evaluation_seeds = sample_evaluation_seeds(seed, evaluations)
   progress_results = []
   success_results = []
+  waypoint_count_results = []
+  first_waypoint_results = []
   smoothness_results = []
   episode_steps_results = []
   fell_over_results = []
@@ -372,6 +374,7 @@ def evaluate(
     observations = wrapped.get_observations().to(device)
     max_progress = torch.zeros(1, device=device)
     succeeded = torch.zeros(1, dtype=torch.bool, device=device)
+    max_waypoints_reached = 0
     previous = torch.zeros(1, 29, device=device)
     previous_previous = previous.clone()
     smoothness: list[torch.Tensor] = []
@@ -389,6 +392,10 @@ def evaluate(
             raise TypeError("Expected WaypointCommand")
           max_progress = torch.maximum(max_progress, command.progress)
           succeeded |= command.success
+          reached_count = int(command.route_index.item()) - 1
+          if bool(command.success.item()):
+            reached_count = len(command.cfg.route) - 1
+          max_waypoints_reached = max(max_waypoints_reached, reached_count)
           smoothness.append(
             torch.mean(
               torch.abs(action - 2 * previous + previous_previous), dim=-1
@@ -407,6 +414,8 @@ def evaluate(
       wrapped.close()
     progress_results.append(max_progress.item())
     success_results.append(float(succeeded.item()))
+    waypoint_count_results.append(float(max_waypoints_reached))
+    first_waypoint_results.append(float(max_waypoints_reached >= 1))
     smoothness_results.append(float(torch.cat(smoothness).mean()))
     episode_steps_results.append(float(episode_steps))
     fell_over_results.append(float(fell_over))
@@ -414,6 +423,8 @@ def evaluate(
   return {
     "route_progress": float(np.mean(progress_results)),
     "route_success": float(np.mean(success_results)),
+    "waypoints_reached": float(np.mean(waypoint_count_results)),
+    "first_waypoint_success": float(np.mean(first_waypoint_results)),
     "smoothness": float(np.mean(smoothness_results)),
     "episode_steps": float(np.mean(episode_steps_results)),
     "fell_over_rate": float(np.mean(fell_over_results)),

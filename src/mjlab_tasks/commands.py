@@ -121,7 +121,7 @@ class WaypointCommandCfg(CommandTermCfg):
   waypoint_threshold: float = 0.45
   max_command_speed: float = 0.6
   max_yaw_rate: float = 0.25
-  min_turning_speed: float = 0.4
+  min_turning_speed: float = 0.1
   heading_stiffness: float = 0.5
   command_mode: Literal["xy", "forward_yaw"] = "xy"
 

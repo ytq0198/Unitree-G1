@@ -110,3 +110,25 @@ outputs/submission/student.py
 - AMP terminal state、timeout bootstrap 和 50 Hz 相邻帧时序正确。seed 5103 的判别器损失由 7.456 收敛到 0.00250，梯度惩罚由 0.639 降至 0.0000369，暂无失衡证据。
 - 修正初始朝向后，平地 seed 4101 `model_799.pt` 在 32 环境达到 100% traversal/walking success、20 s 无提前终止，线速度误差 0.0159 m/s。此前 37.5% 是评测坐标错误，不是步态失败。
 - 同一模型直接迁移完整粗糙地形仅有 10.4% 平均推进、91.3% 提前终止，因此仍需温和粗糙地形课程训练。
+
+Course Project 评测进一步增加 `waypoints_reached` 与
+`first_waypoint_success`，用于区分首段局部推进、到达首航点和完整路线成功；
+正式选模仍以未见随机场景为准。
+
+`forward_yaw` 导航中的转弯最小前进速度由 0.4 m/s 修正为 0.1 m/s，并同步
+到提交端观测适配器。原设置会在目标位于侧方或后方时强制机器人高速前冲，
+与 yaw-rate 转向目标冲突。
+
+### H16-H17：回到 Course Project 的导航训练
+
+- H16 使用二维 `[vx, vy]` waypoint 命令，从修正后的粗糙步态初始化；3 个未见
+  随机场景的 route progress 仅为 1.85%-2.17%，说明底层步态改善不会自动解决
+  Course Project 的方向控制。
+- H17 改用由 body-frame waypoint 生成的 `[forward, yaw_rate]` 命令，复用
+  Lab7 actor 中前向和转向输入语义，但训练和评价均为 Course Project 环境。
+- H17 最佳 `model_299.pt` 在 3 起点筛选中达到 13.74% route progress，
+  平均存活 1046 步；在 10 个未见随机场景正式评测中达到 10.18% route
+  progress、平均存活 789 步。首航点成功率仍为 0，因此尚未达到 Height 门槛。
+- 当前主要泛化问题是每次训练的 64 个并行环境复制同一个 scene seed。下一阶段
+  从 H17 checkpoint 跨多个不同场景连续微调，并逐步扩大初始朝向，而不是继续
+  优化 Lab7 指标。
