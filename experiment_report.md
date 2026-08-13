@@ -35,6 +35,9 @@
 | H10 | 从 H9 扩大初始朝向范围 | progress 降低，说明朝向课程跨度过快 |
 | H11 | 随机朝向、关闭训练推扰、std=0.05/0.1 | 最佳约 1.16%，未超过 H9 |
 | H12 | 恢复兼容的 Lab7 物理约束，速度 0.3/0.4 | 存活最多提高到 352 步，但 3 起点最高约 1.37% |
+| H13 | `5e-6` 学习率，初始朝向范围 `0.30-0.60 rad` | 50 次更新后仍退化，说明仅缩小课程跨度不能阻止步态遗忘 |
+| H14 | 冻结 actor，仅训练第一层 waypoint 两列 | 保持网络结构兼容；随机朝向、导航权重 2 的正式 progress 为 1.740% |
+| H15 | H9 与 H14 waypoint 权重插值 | 75% 适配量取得当前最佳 1.972%，并显著延长存活 |
 
 ## 4. 正式 10 起点评估
 
@@ -46,13 +49,14 @@
 | H12 gait=1.0 `model_100.pt` | 0.016022 | 0 | 172.1 | 1.0 | 0.21476 |
 | H12 gait=0.5 `model_150.pt` | 0.014884 | 0 | 156.2 | 1.0 | 0.22368 |
 | H12 稳定候选 `model_50.pt` | 0.013601 | 0 | 239.3 | 1.0 | **0.18558** |
+| H14 waypoint-only `model_100.pt` | 0.017398 | 0 | 165.2 | 1.0 | 0.26902 |
+| H15 waypoint blend 75% | **0.019724** | 0 | **1297.7** | **0.8** | **0.19691** |
 
-当前最佳 checkpoint：
+当前最佳 checkpoint（H15）：
 
 ```text
-/mnt/localDisk3/weizian/unitree-g1-work/outputs/rsl_rl/
-course_project_navigation_amp_height/
-2026-08-13_01-38-03_h9_std010/model_199.pt
+/mnt/localDisk3/weizian/unitree-g1-work/outputs/warmstart/h15_blends/
+h9_h14m199_a75.pt
 ```
 
 ## 5. 提交验证
@@ -76,6 +80,9 @@ outputs/submission/student.py
 3. 强速度跟踪、直接改为 `forward_yaw`、过快扩大朝向范围均无效。
 4. 恢复物理稳定约束可延长部分模型存活时间，但目前不足以提高正式路线分。
 5. 最后 checkpoint 不一定最佳，必须采用多 checkpoint、独立随机起点评估。
+6. 仅更新 waypoint 输入列可避免其他 actor 参数漂移；与原策略做 75% 插值后，正式 route progress 相对 H9 提高约 11.5%，且 20% 起点达到 5000 步 timeout。
+
+课程 notebook 指向的 `grading_toolkit/grade.py` 当前既不在本地课程目录，也未在服务器 `/mnt/localDisk3/weizian` 下找到，因此暂时无法运行官方评分器；现有评估严格复用 notebook 规定的 10 个随机起点协议。
 
 ## 7. 下一步
 

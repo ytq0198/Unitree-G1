@@ -36,6 +36,7 @@ LOAD_CFG = {
   "iteration": False,
   "rnd": False,
 }
+WAYPOINT_OBSERVATION_SLICE = slice(96, 98)
 
 MODEL_HEIGHT = """from __future__ import annotations
 
@@ -216,6 +217,7 @@ def train(
   entropy_coef: float = 0.01,
   warmstart_std: float | None = None,
   training_pushes: bool = False,
+  waypoint_only_finetune: bool = False,
 ) -> Path:
   """Train direct 29-joint navigation AMP-PPO and return its run directory."""
   if device.startswith("cuda") and not torch.cuda.is_available():
@@ -265,6 +267,21 @@ def train(
       if warmstart_std <= 0.0:
         raise ValueError("warmstart_std must be positive")
       runner.alg.actor.distribution.std_param.data.fill_(warmstart_std)
+    if waypoint_only_finetune:
+      actor = runner.alg.actor
+      for parameter in actor.parameters():
+        parameter.requires_grad_(False)
+      first_layer = actor.mlp[0]
+      if not isinstance(first_layer, torch.nn.Linear):
+        raise TypeError("waypoint-only fine-tuning requires a linear first layer")
+      first_layer.weight.requires_grad_(True)
+      gradient_mask = torch.zeros_like(first_layer.weight)
+      gradient_mask[:, WAYPOINT_OBSERVATION_SLICE] = 1.0
+      first_layer.weight.register_hook(lambda grad: grad * gradient_mask)
+      if hasattr(actor.obs_normalizer, "until"):
+        actor.obs_normalizer.until = 0
+  elif waypoint_only_finetune:
+    raise ValueError("waypoint-only fine-tuning requires --init-checkpoint")
   try:
     runner.learn(num_learning_iterations=iterations)
   finally:

@@ -41,6 +41,7 @@ def main() -> None:
   parser.add_argument("--entropy-coef", type=float, default=0.01)
   parser.add_argument("--warmstart-std", type=float)
   parser.add_argument("--training-pushes", action="store_true")
+  parser.add_argument("--waypoint-only-finetune", action="store_true")
   args = parser.parse_args()
   hidden_dims = tuple(int(value) for value in args.hidden_dims.split(","))
 
@@ -89,6 +90,7 @@ def main() -> None:
       entropy_coef=args.entropy_coef,
       warmstart_std=args.warmstart_std,
       training_pushes=args.training_pushes,
+      waypoint_only_finetune=args.waypoint_only_finetune,
     )
     print(run_dir)
     return

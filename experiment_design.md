@@ -68,6 +68,6 @@ r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
 ## 6. 下一阶段优先级
 
 1. 对当前最佳 Height 模型生成视频并运行 grading toolkit。
-2. 针对随机转向跌倒问题设计更渐进的 heading curriculum，而不是继续盲目延长训练。
+2. 以 waypoint-only 受限微调和策略插值为主线，避免全 actor 微调导致步态遗忘。
 3. 完成 Depth smoke 与 Height-to-Depth 初始化，争取 Depth 10 分。
 4. 完成 AMP scale、平滑权重和感知模式消融，为最终报告提供可信证据。
