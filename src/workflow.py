@@ -71,7 +71,9 @@ def adapt_waypoint(actor: torch.Tensor) -> torch.Tensor:
   actor = actor.clone()
   displacement = actor[..., 96:98]
   heading_error = torch.atan2(displacement[..., 1], displacement[..., 0])
-  forward = torch.clamp(torch.norm(displacement, dim=-1), max=0.6)
+  forward = torch.clamp(
+    torch.norm(displacement, dim=-1), max=__MAX_COMMAND_SPEED__
+  )
   forward *= torch.clamp(torch.cos(heading_error), min=0.0)
   forward = torch.maximum(forward, torch.full_like(forward, __MIN_TURNING_SPEED__))
   actor[..., 96] = forward
@@ -437,6 +439,7 @@ def evaluate(
     episode_steps = 0
     fell_over = False
     time_out = False
+    terminal_route_index = 1
     try:
       with torch.inference_mode():
         for _ in range(steps):
@@ -463,6 +466,7 @@ def evaluate(
               command.final_index[command.scene_index].item()
             )
           max_waypoints_reached = max(max_waypoints_reached, reached_count)
+          terminal_route_index = int(command.route_index.item())
           smoothness.append(
             torch.mean(
               torch.abs(action - 2 * previous + previous_previous), dim=-1
@@ -480,7 +484,7 @@ def evaluate(
     finally:
       wrapped.close()
     if fell_over:
-      target_index = min(int(command.route_index.item()), len(route_kinds) - 1)
+      target_index = min(terminal_route_index, len(route_kinds) - 1)
       failure_target_counts[route_kinds[target_index]] += 1
       post_waypoint_failures += int(max_waypoints_reached >= 1)
     progress_results.append(max_progress.item())
@@ -523,6 +527,7 @@ def record_video(
   output: str | Path | None = None,
   command_mode: str = "xy",
   hidden_dims: tuple[int, ...] = (256, 128),
+  max_command_speed: float = 0.6,
   min_turning_speed: float = 0.1,
 ) -> Path:
   """Record one episode and stop at its first terminal transition."""
@@ -538,6 +543,7 @@ def record_video(
     render_mode="rgb_array",
     command_mode=command_mode,
     hidden_dims=hidden_dims,
+    max_command_speed=max_command_speed,
     min_turning_speed=min_turning_speed,
   )
   policy = runner.get_inference_policy(device)
@@ -574,6 +580,7 @@ def prepare_submission(
   output_dir: str | Path | None = None,
   command_mode: str = "xy",
   hidden_dims: tuple[int, ...] = (256, 128),
+  max_command_speed: float = 0.6,
   min_turning_speed: float = 0.1,
 ) -> Path:
   """Prepare the strict policy.pt, model.py, student.py grading folder."""
@@ -583,6 +590,7 @@ def prepare_submission(
     play=True,
     student_path=student_path,
     command_mode=command_mode,
+    max_command_speed=max_command_speed,
     min_turning_speed=min_turning_speed,
   )
   cfg.scene.num_envs = 1
@@ -605,6 +613,8 @@ def prepare_submission(
   if mode == "height" and command_mode == "forward_yaw":
     model_source = MODEL_HEIGHT_FORWARD_YAW.replace(
       "__MIN_TURNING_SPEED__", repr(float(min_turning_speed))
+    ).replace(
+      "__MAX_COMMAND_SPEED__", repr(float(max_command_speed))
     )
   (build_dir / "model.py").write_text(model_source, encoding="utf-8")
   shutil.copy2(student_path, build_dir / "student.py")

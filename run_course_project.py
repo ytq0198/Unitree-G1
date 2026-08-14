@@ -154,6 +154,7 @@ def main() -> None:
         student_file=student,
         command_mode=args.command_mode,
         hidden_dims=hidden_dims,
+        max_command_speed=args.max_command_speed,
         min_turning_speed=args.min_turning_speed,
       )
     )
@@ -166,6 +167,7 @@ def main() -> None:
         student_file=student,
         command_mode=args.command_mode,
         hidden_dims=hidden_dims,
+        max_command_speed=args.max_command_speed,
         min_turning_speed=args.min_turning_speed,
       )
     )
