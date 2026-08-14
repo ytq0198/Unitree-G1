@@ -24,6 +24,7 @@ from src.paths import PROJECT_ROOT
 from src.terrain import (
   COURSE_PROJECT_BORDER_WIDTH,
   NavigationScene,
+  generate_navigation_scene,
   sample_evaluation_seeds,
 )
 
@@ -72,7 +73,7 @@ def adapt_waypoint(actor: torch.Tensor) -> torch.Tensor:
   heading_error = torch.atan2(displacement[..., 1], displacement[..., 0])
   forward = torch.clamp(torch.norm(displacement, dim=-1), max=0.6)
   forward *= torch.clamp(torch.cos(heading_error), min=0.0)
-  forward = torch.maximum(forward, torch.full_like(forward, 0.1))
+  forward = torch.maximum(forward, torch.full_like(forward, __MIN_TURNING_SPEED__))
   actor[..., 96] = forward
   actor[..., 97] = torch.clamp(0.5 * heading_error, -0.25, 0.25)
   return actor
@@ -209,6 +210,7 @@ def train(
   foot_clearance_target: float = 0.1,
   foot_clearance_scale: float = 1.0,
   max_command_speed: float = 0.6,
+  min_turning_speed: float = 0.1,
   amp_reward_scale: float = 0.5,
   learning_rate: float = 1.0e-3,
   learning_rate_schedule: str = "adaptive",
@@ -243,6 +245,7 @@ def train(
     foot_clearance_target=foot_clearance_target,
     foot_clearance_scale=foot_clearance_scale,
     max_command_speed=max_command_speed,
+    min_turning_speed=min_turning_speed,
     command_mode=command_mode,
     align_start_heading=align_start_heading,
     start_heading_spread=start_heading_spread,
@@ -327,6 +330,7 @@ def _inference_runner(
   start_heading_spread: float = 0.25,
   hidden_dims: tuple[int, ...] = (256, 128),
   max_command_speed: float = 0.6,
+  min_turning_speed: float = 0.1,
   terrain_difficulty: float = 1.0,
   start_offset_m: float = 0.0,
 ) -> tuple[ManagerBasedRlEnv, ManualResetAmpVecEnvWrapper, MjlabOnPolicyRunner]:
@@ -340,6 +344,7 @@ def _inference_runner(
     align_start_heading=align_start_heading,
     start_heading_spread=start_heading_spread,
     max_command_speed=max_command_speed,
+    min_turning_speed=min_turning_speed,
     terrain_difficulty=terrain_difficulty,
     start_offset_m=start_offset_m,
   )
@@ -369,6 +374,7 @@ def evaluate(
   start_heading_spread: float = 0.25,
   hidden_dims: tuple[int, ...] = (256, 128),
   max_command_speed: float = 0.6,
+  min_turning_speed: float = 0.1,
   terrain_difficulty: float = 1.0,
   start_offset_m: float = 0.0,
 ) -> dict[str, float]:
@@ -388,7 +394,20 @@ def evaluate(
   episode_steps_results = []
   fell_over_results = []
   time_out_results = []
+  failure_target_counts = {
+    "pile": 0,
+    "platform_gap": 0,
+    "pyramid_stairs": 0,
+  }
+  post_waypoint_failures = 0
   for scene_seed in evaluation_seeds:
+    scene = generate_navigation_scene(scene_seed)
+    route_kinds = tuple(
+      scene.tile_at(
+        int(x // scene.tile_size), int(y // scene.tile_size)
+      ).kind
+      for x, y in scene.route
+    )
     env, wrapped, runner = _inference_runner(
       checkpoint,
       mode,
@@ -401,6 +420,7 @@ def evaluate(
       start_heading_spread=start_heading_spread,
       hidden_dims=hidden_dims,
       max_command_speed=max_command_speed,
+      min_turning_speed=min_turning_speed,
       terrain_difficulty=terrain_difficulty,
       start_offset_m=start_offset_m,
     )
@@ -459,6 +479,10 @@ def evaluate(
           )
     finally:
       wrapped.close()
+    if fell_over:
+      target_index = min(int(command.route_index.item()), len(route_kinds) - 1)
+      failure_target_counts[route_kinds[target_index]] += 1
+      post_waypoint_failures += int(max_waypoints_reached >= 1)
     progress_results.append(max_progress.item())
     progress_m_results.append(max_path_position.item())
     closest_waypoint_results.append(closest_waypoint.item())
@@ -480,6 +504,10 @@ def evaluate(
     "episode_steps": float(np.mean(episode_steps_results)),
     "fell_over_rate": float(np.mean(fell_over_results)),
     "time_out_rate": float(np.mean(time_out_results)),
+    "fall_target_pile_rate": failure_target_counts["pile"] / evaluations,
+    "fall_target_gap_rate": failure_target_counts["platform_gap"] / evaluations,
+    "fall_target_stairs_rate": failure_target_counts["pyramid_stairs"] / evaluations,
+    "post_waypoint_fall_rate": post_waypoint_failures / evaluations,
     "random_start_evaluations": float(len(evaluation_seeds)),
   }
 
@@ -495,6 +523,7 @@ def record_video(
   output: str | Path | None = None,
   command_mode: str = "xy",
   hidden_dims: tuple[int, ...] = (256, 128),
+  min_turning_speed: float = 0.1,
 ) -> Path:
   """Record one episode and stop at its first terminal transition."""
   if frames < 150:
@@ -509,6 +538,7 @@ def record_video(
     render_mode="rgb_array",
     command_mode=command_mode,
     hidden_dims=hidden_dims,
+    min_turning_speed=min_turning_speed,
   )
   policy = runner.get_inference_policy(device)
   observations = wrapped.get_observations().to(device)
@@ -544,11 +574,16 @@ def prepare_submission(
   output_dir: str | Path | None = None,
   command_mode: str = "xy",
   hidden_dims: tuple[int, ...] = (256, 128),
+  min_turning_speed: float = 0.1,
 ) -> Path:
   """Prepare the strict policy.pt, model.py, student.py grading folder."""
   student_path = _student_path(student_file)
   cfg = course_g1_navigation_env_cfg(
-    mode, play=True, student_path=student_path, command_mode=command_mode
+    mode,
+    play=True,
+    student_path=student_path,
+    command_mode=command_mode,
+    min_turning_speed=min_turning_speed,
   )
   cfg.scene.num_envs = 1
   agent_cfg = course_g1_navigation_ppo_runner_cfg(
@@ -568,7 +603,9 @@ def prepare_submission(
     wrapped.close()
   model_source = MODEL_DEPTH if mode == "depth" else MODEL_HEIGHT
   if mode == "height" and command_mode == "forward_yaw":
-    model_source = MODEL_HEIGHT_FORWARD_YAW
+    model_source = MODEL_HEIGHT_FORWARD_YAW.replace(
+      "__MIN_TURNING_SPEED__", repr(float(min_turning_speed))
+    )
   (build_dir / "model.py").write_text(model_source, encoding="utf-8")
   shutil.copy2(student_path, build_dir / "student.py")
   return build_dir

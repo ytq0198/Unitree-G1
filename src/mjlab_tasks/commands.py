@@ -9,7 +9,7 @@ import torch
 from mjlab.entity import Entity
 from mjlab.managers.command_manager import CommandTerm, CommandTermCfg
 
-from src.navigation_math import route_position_m
+from src.navigation_math import forward_yaw_command, route_position_m
 from src.student_api import load_student_function
 
 
@@ -86,19 +86,13 @@ class WaypointCommand(CommandTerm):
         self.cfg.max_command_speed / distance.clamp_min(1.0e-6), max=1.0
       )
       return displacement * scale
-    heading_error = torch.atan2(displacement[:, 1], displacement[:, 0])
-    forward = torch.clamp(distance.squeeze(-1), max=self.cfg.max_command_speed)
-    forward_scale = torch.clamp(torch.cos(heading_error), min=0.0)
-    forward = torch.maximum(
-      forward * forward_scale,
-      torch.full_like(forward, self.cfg.min_turning_speed),
+    return forward_yaw_command(
+      displacement,
+      max_command_speed=self.cfg.max_command_speed,
+      min_turning_speed=self.cfg.min_turning_speed,
+      heading_stiffness=self.cfg.heading_stiffness,
+      max_yaw_rate=self.cfg.max_yaw_rate,
     )
-    yaw_rate = torch.clamp(
-      self.cfg.heading_stiffness * heading_error,
-      -self.cfg.max_yaw_rate,
-      self.cfg.max_yaw_rate,
-    )
-    return torch.stack((forward, yaw_rate), dim=-1)
 
   def _resample_command(self, env_ids: torch.Tensor) -> None:
     self.route_index[env_ids] = 1

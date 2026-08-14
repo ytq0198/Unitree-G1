@@ -5,6 +5,30 @@ from __future__ import annotations
 import torch
 
 
+def forward_yaw_command(
+  displacement: torch.Tensor,
+  *,
+  max_command_speed: float,
+  min_turning_speed: float,
+  heading_stiffness: float,
+  max_yaw_rate: float,
+) -> torch.Tensor:
+  """Convert planar displacement to a turn-aware forward/yaw command."""
+  if min_turning_speed < 0.0 or min_turning_speed > max_command_speed:
+    raise ValueError("min_turning_speed must be in [0, max_command_speed]")
+  heading_error = torch.atan2(displacement[..., 1], displacement[..., 0])
+  distance = torch.norm(displacement, dim=-1)
+  forward = torch.clamp(distance, max=max_command_speed)
+  forward *= torch.clamp(torch.cos(heading_error), min=0.0)
+  forward = torch.maximum(
+    forward, torch.full_like(forward, min_turning_speed)
+  )
+  yaw_rate = torch.clamp(
+    heading_stiffness * heading_error, -max_yaw_rate, max_yaw_rate
+  )
+  return torch.stack((forward, yaw_rate), dim=-1)
+
+
 def route_position_m(
   robot_xy: torch.Tensor,
   env_origins_xy: torch.Tensor,

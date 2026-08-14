@@ -20,11 +20,13 @@ def main() -> None:
   parser.add_argument("--device", default="cuda:0")
   parser.add_argument("--hidden-dims", default="512,256,128")
   parser.add_argument("--terrain-difficulty", type=float, default=1.0)
+  parser.add_argument("--min-turning-speed", type=float, default=0.1)
   parser.add_argument("--start-offset-m", type=float, default=0.0)
   args = parser.parse_args()
 
   from src import workflow
   from src.mjlab_tasks.commands import WaypointCommand
+  from src.terrain import generate_navigation_scene
 
   env, wrapped, runner = workflow._inference_runner(
     args.checkpoint,
@@ -36,6 +38,7 @@ def main() -> None:
     command_mode=args.command_mode,
     hidden_dims=tuple(int(value) for value in args.hidden_dims.split(",")),
     terrain_difficulty=args.terrain_difficulty,
+    min_turning_speed=args.min_turning_speed,
     start_offset_m=args.start_offset_m,
   )
   policy = runner.get_inference_policy(args.device)
@@ -44,6 +47,12 @@ def main() -> None:
   if not isinstance(command, WaypointCommand):
     raise TypeError("Expected WaypointCommand")
   start_xy = command.robot.data.root_link_pos_w[0, :2].clone()
+  scene = generate_navigation_scene(args.seed)
+  route_kinds = []
+  for x, y in scene.route:
+    route_kinds.append(
+      scene.tile_at(int(x // scene.tile_size), int(y // scene.tile_size)).kind
+    )
   samples = []
   try:
     with torch.inference_mode():
@@ -69,6 +78,10 @@ def main() -> None:
               .tolist(),
               "displacement": (xy - start_xy).cpu().tolist(),
               "route_progress": float(command.progress[0]),
+              "route_index": int(command.route_index[0]),
+              "target_terrain": route_kinds[int(command.route_index[0])],
+              "height_scan_min": float(observations["actor"][0, 98:].min()),
+              "height_scan_max": float(observations["actor"][0, 98:].max()),
               "terminated": bool(terminated.item()),
               "truncated": bool(truncated.item()),
             }
@@ -78,7 +91,17 @@ def main() -> None:
         observations = TensorDict(observation_dict, batch_size=[1], device=args.device)
   finally:
     wrapped.close()
-  print(json.dumps(samples, indent=2))
+  print(
+    json.dumps(
+      {
+        "seed": args.seed,
+        "route": scene.route,
+        "route_kinds": route_kinds,
+        "samples": samples,
+      },
+      indent=2,
+    )
+  )
 
 
 if __name__ == "__main__":

@@ -32,9 +32,21 @@ def load_navigation_math_module():
 
 
 route_position_m = load_navigation_math_module().route_position_m
+forward_yaw_command = load_navigation_math_module().forward_yaw_command
 
 
 class StudentFormulaTests(unittest.TestCase):
+  def test_forward_yaw_allows_turning_in_place(self) -> None:
+    command = forward_yaw_command(
+      torch.tensor([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]]),
+      max_command_speed=0.6,
+      min_turning_speed=0.0,
+      heading_stiffness=0.5,
+      max_yaw_rate=0.25,
+    )
+    torch.testing.assert_close(command[:, 0], torch.tensor([0.6, 0.0, 0.0]))
+    torch.testing.assert_close(command[:, 1], torch.tensor([0.0, 0.25, 0.25]))
+
   def test_route_position_projects_onto_active_segment(self) -> None:
     route = torch.tensor([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]])
     cumulative = torch.tensor([0.0, 10.0, 20.0])
