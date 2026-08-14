@@ -262,6 +262,12 @@ Course Project 评测进一步增加 `waypoints_reached` 与
   难度分别评测 `min_turning_speed=0.1/0.0`，各 6 个相同 seed；统一比较路线推进、
   完整成功、跌倒目标地形和 `post_waypoint_fall_rate`。只有 `0.0` 在跨场景复核中
   降低航点切换后跌倒且不降低首航点率，才从 H49 启动短程微调。
+- 提交接口复核确认，课程原始环境在 actor 第 96-97 列输出未缩放的 body-frame
+  waypoint 位移，而当前 `forward_yaw` checkpoint 在训练时接收 `[forward_speed,
+  yaw_rate]`。提交 `model.py` 中的适配器因此是正式评测所必需的语义转换，并且必须在
+  导出策略内部的 observation normalizer 之前执行。新增回归测试直接从导出模板加载
+  适配器，验证其数值与训练端 `forward_yaw_command()` 一致、仅修改这两列且不原地
+  改写评分环境传入的观测。
 - 视频接口审计发现，旧 `record_video()` 未接收命令行的地形难度、起点朝向和起点
   偏移，导致阶段 checkpoint 即使按低难度评测，视频仍会默认为满难度 1.0，不能与
   评测指标一一对应。现已贯通上述参数；后续每个视频文件名和报告必须注明 checkpoint、

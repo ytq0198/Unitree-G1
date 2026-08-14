@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import ast
 import math
 import unittest
 from pathlib import Path
@@ -31,11 +32,57 @@ def load_navigation_math_module():
   return module
 
 
+def load_exported_waypoint_adapter(
+  max_command_speed: float,
+  min_turning_speed: float,
+):
+  workflow_path = Path(__file__).resolve().parents[1] / "src" / "workflow.py"
+  tree = ast.parse(workflow_path.read_text(encoding="utf-8"))
+  for node in tree.body:
+    if not isinstance(node, ast.Assign):
+      continue
+    if not any(
+      isinstance(target, ast.Name) and target.id == "MODEL_HEIGHT_FORWARD_YAW"
+      for target in node.targets
+    ):
+      continue
+    source = ast.literal_eval(node.value)
+    source = source.replace("__MAX_COMMAND_SPEED__", repr(max_command_speed))
+    source = source.replace("__MIN_TURNING_SPEED__", repr(min_turning_speed))
+    namespace: dict[str, object] = {}
+    exec(source, namespace)
+    return namespace["adapt_waypoint"]
+  raise AssertionError("MODEL_HEIGHT_FORWARD_YAW was not found")
+
+
 route_position_m = load_navigation_math_module().route_position_m
 forward_yaw_command = load_navigation_math_module().forward_yaw_command
 
 
 class StudentFormulaTests(unittest.TestCase):
+  def test_submission_adapter_matches_training_command(self) -> None:
+    actor = torch.zeros(5, 285)
+    displacement = torch.tensor(
+      [[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.3, -0.4], [8.0, 2.0]]
+    )
+    actor[:, 96:98] = displacement
+    original = actor.clone()
+    adapter = load_exported_waypoint_adapter(0.6, 0.0)
+
+    adapted = adapter(actor)
+    expected = forward_yaw_command(
+      displacement,
+      max_command_speed=0.6,
+      min_turning_speed=0.0,
+      heading_stiffness=0.5,
+      max_yaw_rate=0.25,
+    )
+
+    torch.testing.assert_close(adapted[:, 96:98], expected)
+    torch.testing.assert_close(adapted[:, :96], original[:, :96])
+    torch.testing.assert_close(adapted[:, 98:], original[:, 98:])
+    torch.testing.assert_close(actor, original)
+
   def test_forward_yaw_allows_turning_in_place(self) -> None:
     command = forward_yaw_command(
       torch.tensor([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]]),
