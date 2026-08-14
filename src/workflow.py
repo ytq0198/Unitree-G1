@@ -526,9 +526,13 @@ def record_video(
   student_file: str | Path | None = None,
   output: str | Path | None = None,
   command_mode: str = "xy",
+  align_start_heading: bool = False,
+  start_heading_spread: float = 0.25,
   hidden_dims: tuple[int, ...] = (256, 128),
   max_command_speed: float = 0.6,
   min_turning_speed: float = 0.1,
+  terrain_difficulty: float = 1.0,
+  start_offset_m: float = 0.0,
 ) -> Path:
   """Record one episode and stop at its first terminal transition."""
   if frames < 150:
@@ -542,9 +546,13 @@ def record_video(
     student_file=student_file,
     render_mode="rgb_array",
     command_mode=command_mode,
+    align_start_heading=align_start_heading,
+    start_heading_spread=start_heading_spread,
     hidden_dims=hidden_dims,
     max_command_speed=max_command_speed,
     min_turning_speed=min_turning_speed,
+    terrain_difficulty=terrain_difficulty,
+    start_offset_m=start_offset_m,
   )
   policy = runner.get_inference_policy(device)
   observations = wrapped.get_observations().to(device)

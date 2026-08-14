@@ -153,9 +153,13 @@ def main() -> None:
         seed=args.seed,
         student_file=student,
         command_mode=args.command_mode,
+        align_start_heading=args.align_start_heading,
+        start_heading_spread=args.start_heading_spread,
         hidden_dims=hidden_dims,
         max_command_speed=args.max_command_speed,
         min_turning_speed=args.min_turning_speed,
+        terrain_difficulty=args.terrain_difficulty,
+        start_offset_m=args.start_offset_m,
       )
     )
   else:

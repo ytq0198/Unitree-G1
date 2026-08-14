@@ -262,3 +262,7 @@ Course Project 评测进一步增加 `waypoints_reached` 与
   难度分别评测 `min_turning_speed=0.1/0.0`，各 6 个相同 seed；统一比较路线推进、
   完整成功、跌倒目标地形和 `post_waypoint_fall_rate`。只有 `0.0` 在跨场景复核中
   降低航点切换后跌倒且不降低首航点率，才从 H49 启动短程微调。
+- 视频接口审计发现，旧 `record_video()` 未接收命令行的地形难度、起点朝向和起点
+  偏移，导致阶段 checkpoint 即使按低难度评测，视频仍会默认为满难度 1.0，不能与
+  评测指标一一对应。现已贯通上述参数；后续每个视频文件名和报告必须注明 checkpoint、
+  scene seed、terrain difficulty、命令速度和单 episode 终止原因。
