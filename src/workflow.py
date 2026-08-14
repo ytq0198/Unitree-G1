@@ -379,7 +379,7 @@ def evaluate(
   min_turning_speed: float = 0.1,
   terrain_difficulty: float = 1.0,
   start_offset_m: float = 0.0,
-) -> dict[str, float]:
+) -> dict[str, object]:
   """Average ten independent rollouts with distinct random route starts."""
   if num_envs != 1:
     raise ValueError("Course Project evaluation uses one environment per start")
@@ -401,7 +401,13 @@ def evaluate(
     "platform_gap": 0,
     "pyramid_stairs": 0,
   }
+  failure_location_counts = {
+    "pile": 0,
+    "platform_gap": 0,
+    "pyramid_stairs": 0,
+  }
   post_waypoint_failures = 0
+  episode_details: list[dict[str, object]] = []
   for scene_seed in evaluation_seeds:
     scene = generate_navigation_scene(scene_seed)
     route_kinds = tuple(
@@ -440,6 +446,7 @@ def evaluate(
     fell_over = False
     time_out = False
     terminal_route_index = 1
+    terminal_tile_kind = route_kinds[0]
     try:
       with torch.inference_mode():
         for _ in range(steps):
@@ -477,6 +484,19 @@ def evaluate(
           if bool((terminated | truncated).item()):
             fell_over = bool(terminated.item()) and not bool(succeeded.item())
             time_out = bool(truncated.item())
+            robot_xy = env.scene["robot"].data.root_link_pos_w[0, :2]
+            scene_xy = (
+              robot_xy
+              - env.scene.env_origins[0, :2]
+              + torch.tensor(scene.route[0], device=device)
+            )
+            terminal_row = max(
+              0, min(scene.rows - 1, int(scene_xy[0].item() // scene.tile_size))
+            )
+            terminal_col = max(
+              0, min(scene.cols - 1, int(scene_xy[1].item() // scene.tile_size))
+            )
+            terminal_tile_kind = scene.tile_at(terminal_row, terminal_col).kind
             break
           observations = TensorDict(
             observation_dict, batch_size=[1], device=device
@@ -486,6 +506,7 @@ def evaluate(
     if fell_over:
       target_index = min(terminal_route_index, len(route_kinds) - 1)
       failure_target_counts[route_kinds[target_index]] += 1
+      failure_location_counts[terminal_tile_kind] += 1
       post_waypoint_failures += int(max_waypoints_reached >= 1)
     progress_results.append(max_progress.item())
     progress_m_results.append(max_path_position.item())
@@ -497,6 +518,28 @@ def evaluate(
     episode_steps_results.append(float(episode_steps))
     fell_over_results.append(float(fell_over))
     time_out_results.append(float(time_out))
+    termination = "step_limit"
+    if bool(succeeded.item()):
+      termination = "route_success"
+    elif fell_over:
+      termination = "fell_over"
+    elif time_out:
+      termination = "time_out"
+    target_index = min(terminal_route_index, len(route_kinds) - 1)
+    episode_details.append(
+      {
+        "seed": scene_seed,
+        "route_kinds": route_kinds,
+        "route_length_m": scene.route_length,
+        "route_progress": max_progress.item(),
+        "route_progress_m": max_path_position.item(),
+        "waypoints_reached": max_waypoints_reached,
+        "episode_steps": episode_steps,
+        "termination": termination,
+        "target_kind_at_end": route_kinds[target_index],
+        "physical_tile_at_end": terminal_tile_kind,
+      }
+    )
   return {
     "route_progress": float(np.mean(progress_results)),
     "route_progress_m": float(np.mean(progress_m_results)),
@@ -511,8 +554,12 @@ def evaluate(
     "fall_target_pile_rate": failure_target_counts["pile"] / evaluations,
     "fall_target_gap_rate": failure_target_counts["platform_gap"] / evaluations,
     "fall_target_stairs_rate": failure_target_counts["pyramid_stairs"] / evaluations,
+    "fall_location_pile_rate": failure_location_counts["pile"] / evaluations,
+    "fall_location_gap_rate": failure_location_counts["platform_gap"] / evaluations,
+    "fall_location_stairs_rate": failure_location_counts["pyramid_stairs"] / evaluations,
     "post_waypoint_fall_rate": post_waypoint_failures / evaluations,
     "random_start_evaluations": float(len(evaluation_seeds)),
+    "episodes": episode_details,
   }
 
 

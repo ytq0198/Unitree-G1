@@ -53,7 +53,7 @@ r_nav = 4 * progress + 0.5 * waypoint_reached + 5 * route_success
 - 沟槽与台阶分别维护专家 checkpoint：沟槽采用适度 AMP，台阶采用更强 AMP 与 Lab7 步态保持；单项达标后再通过混合场景训练或 actor 插值整合。
 - 每组先做 3 起点筛选，再对候选做 10 起点、5000 步正式评估。
 - 正式障碍课程使用 `--training-scenes 4`：四张完整地图作为 terrain columns 均匀分配给并行环境，WaypointCommand 依据每个环境的 terrain type 选择对应路线，使同一次 PPO 更新包含跨地图经验。单地图训练仅用于技能诊断，不再作为泛化模型的主要训练方式。
-- 主要指标为 route progress；同时报告存活步数、跌倒率和平滑度。
+- 主要指标为 route progress；同时报告存活步数、跌倒率和平滑度。每个评测 seed 保留路线地形序列、终止原因、终止时目标地形和机器人实际所在 tile；目标地形用于判断正在尝试的障碍，实际 tile 用于区分“尚未进入障碍”与“已进入后失稳”。
 - 在 Course Project 自身三类地形上使用难度课程：逐步增加 pile 高度、platform gap 宽度和 pyramid stairs 高度；正式评测固定为完整难度 1.0。
 - 使用训练专用的首段随机起点偏移，在同一批环境中混合中心起点和 tile 边界样本；偏移始终小于半个 tile，正式评测保持原始中心起点。
 - `platform_gap` 使用四向可进入的中心平台环形沟槽，`pyramid_stairs` 使用四向同心台阶；地形几何必须与 route graph 的入口方向一致。专项课程从窄沟/低台阶逐步增加到正式的 0.25 m 沟宽和 0.08 m 阶高。
